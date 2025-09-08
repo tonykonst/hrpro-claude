@@ -1,6 +1,6 @@
 /**
  * useWindowManager - Хук для управления окнами через WindowManager
- * 
+ *
  * Предоставляет:
  * - Реактивное управление окнами
  * - Автоматический жизненный цикл окна данных
@@ -26,7 +26,10 @@ export const useWindowManager = (options: UseWindowManagerOptions) => {
     try {
       await windowManager.createDataWindow();
     } catch (error) {
-      console.error('❌ [useWindowManager] Failed to create data window:', error);
+      console.error(
+        '❌ [useWindowManager] Failed to create data window:',
+        error
+      );
       onError?.(error as Error);
     }
   }, [onError]);
@@ -36,15 +39,21 @@ export const useWindowManager = (options: UseWindowManagerOptions) => {
     try {
       await windowManager.closeDataWindow();
     } catch (error) {
-      console.error('❌ [useWindowManager] Failed to close data window:', error);
+      console.error(
+        '❌ [useWindowManager] Failed to close data window:',
+        error
+      );
       onError?.(error as Error);
     }
   }, [onError]);
 
   // Функция для получения состояния окна
-  const getWindowState = useCallback((windowId: string): WindowState | undefined => {
-    return windowManager.getWindowState(windowId);
-  }, []);
+  const getWindowState = useCallback(
+    (windowId: string): WindowState | undefined => {
+      return windowManager.getWindowState(windowId);
+    },
+    []
+  );
 
   // Функция для проверки существования окна
   const hasWindow = useCallback((windowId: string): boolean => {
@@ -54,7 +63,9 @@ export const useWindowManager = (options: UseWindowManagerOptions) => {
   // Инициализация
   useEffect(() => {
     if (!isInitialized.current) {
-      console.log(`🚀 [useWindowManager] Initializing for ${windowType} window`);
+      console.log(
+        `🚀 [useWindowManager] Initializing for ${windowType} window`
+      );
       isInitialized.current = true;
     }
   }, [windowType]);
@@ -75,7 +86,9 @@ export const useWindowManager = (options: UseWindowManagerOptions) => {
     };
 
     const handleRecordingStateChanged = (recordingState: boolean) => {
-      console.log(`🎤 [useWindowManager] Recording state changed: ${recordingState}`);
+      console.log(
+        `🎤 [useWindowManager] Recording state changed: ${recordingState}`
+      );
     };
 
     const handleError = (error: Error) => {

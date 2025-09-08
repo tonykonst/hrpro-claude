@@ -7,10 +7,10 @@ export interface ITranscriptionService {
   // Core connection methods
   connect(): Promise<void>;
   disconnect(): void;
-  
+
   // Audio streaming
   sendAudio(audioData: ArrayBuffer): void;
-  
+
   // Event callbacks (set in constructor)
   onTranscript(callback: (event: TranscriptEvent) => void): void;
   onError(callback: (error: string) => void): void;

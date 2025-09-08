@@ -1,6 +1,6 @@
 /**
  * Component exports
- * 
+ *
  * Main exports for all components in the interview assistant application
  */
 

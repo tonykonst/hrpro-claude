@@ -11,13 +11,13 @@ interface RecordingScreenProps {
   lastCorrectionTime?: number; // Для анимации исправлений
 }
 
-export function RecordingScreen({ 
-  transcript, 
-  partialTranscript, 
-  insights, 
-  audioLevel, 
+export function RecordingScreen({
+  transcript,
+  partialTranscript,
+  insights,
+  audioLevel,
   onStopRecording,
-  lastCorrectionTime
+  lastCorrectionTime,
 }: RecordingScreenProps) {
   const [showCorrectionFlash, setShowCorrectionFlash] = React.useState(false);
 
@@ -40,26 +40,26 @@ export function RecordingScreen({
             <button
               onClick={onStopRecording}
               className="stop-button"
-              style={{WebkitAppRegion: 'no-drag'} as any}
+              style={{ WebkitAppRegion: 'no-drag' } as any}
             >
               <div className="stop-button__icon"></div>
             </button>
-            
+
             {/* Wave Loader Recording indicator */}
-            <WaveLoader 
+            <WaveLoader
               isActive={true}
               audioLevel={audioLevel}
               className="wave-loader--recording"
             />
           </div>
-          
+
           {/* Separator */}
           <div className="control-panel__separator"></div>
-          
+
           {/* Drag zone - вся эта область перетаскиваемая */}
-          <div 
+          <div
             className="control-panel__drag-zone"
-            style={{WebkitAppRegion: 'drag'} as any}
+            style={{ WebkitAppRegion: 'drag' } as any}
           >
             {/* Drag dots */}
             <div className="drag-dots">
@@ -71,7 +71,7 @@ export function RecordingScreen({
           </div>
         </div>
       </div>
-      
+
       {/* Content panel */}
       <div className="content-panel">
         {/* Transcript section */}
@@ -79,23 +79,31 @@ export function RecordingScreen({
           <h3 className="content-section__title">Transcript</h3>
           <div className="content-section__content">
             {transcript && (
-              <p className={`transcript-text ${showCorrectionFlash ? 'transcript-text--corrected' : ''}`}>
+              <p
+                className={`transcript-text ${showCorrectionFlash ? 'transcript-text--corrected' : ''}`}
+              >
                 {transcript}
               </p>
             )}
-            {partialTranscript && <p className="transcript-text transcript-text--partial">{partialTranscript}</p>}
+            {partialTranscript && (
+              <p className="transcript-text transcript-text--partial">
+                {partialTranscript}
+              </p>
+            )}
             {!transcript && !partialTranscript && (
-              <p className="transcript-text transcript-text--placeholder">Listening...</p>
+              <p className="transcript-text transcript-text--placeholder">
+                Listening...
+              </p>
             )}
           </div>
         </div>
-        
+
         {/* Insights section */}
         <div className="content-section">
           <h3 className="content-section__title">Insights</h3>
           <div className="content-section__content">
             {insights.length > 0 ? (
-              insights.slice(-3).map((insight) => (
+              insights.slice(-3).map(insight => (
                 <div key={insight.id} className="insight-item">
                   {insight.text}
                 </div>

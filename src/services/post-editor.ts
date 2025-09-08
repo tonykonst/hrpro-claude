@@ -42,14 +42,16 @@ export class PostEditorService {
   constructor(config: PostEditorConfig, context: CorrectionContext) {
     this.config = config;
     this.context = context;
-    
+
     // Проверяем, что API ключ есть
     if (!config.apiKey || config.apiKey === 'your_claude_api_key_here') {
-      console.warn('⚠️ [POST-EDITOR] Claude API key not configured, post-editing will be disabled');
+      console.warn(
+        '⚠️ [POST-EDITOR] Claude API key not configured, post-editing will be disabled'
+      );
       this.anthropic = null;
       return;
     }
-    
+
     try {
       this.anthropic = new Anthropic({
         apiKey: config.apiKey,
@@ -68,7 +70,7 @@ export class PostEditorService {
       reasons: [],
       confidence: 0,
       language: this.detectLanguage(text),
-      technicalTerms: this.extractTechnicalTerms(text)
+      technicalTerms: this.extractTechnicalTerms(text),
     };
 
     // Если Anthropic не инициализирован, возвращаем базовый анализ
@@ -120,7 +122,10 @@ export class PostEditorService {
   }
 
   // Исправление текста с помощью LLM
-  async correctText(text: string, analysis: SegmentAnalysis): Promise<CorrectionResult> {
+  async correctText(
+    text: string,
+    analysis: SegmentAnalysis
+  ): Promise<CorrectionResult> {
     const startTime = Date.now();
 
     try {
@@ -134,17 +139,19 @@ export class PostEditorService {
         text_length: text.length,
         reasons: analysis.reasons,
         language: analysis.language,
-        tech_terms: analysis.technicalTerms.length
+        tech_terms: analysis.technicalTerms.length,
       });
 
       // Проверяем, что Anthropic инициализирован
       if (!this.anthropic) {
-        console.warn('⚠️ [POST-EDITOR] Anthropic not initialized, skipping correction');
+        console.warn(
+          '⚠️ [POST-EDITOR] Anthropic not initialized, skipping correction'
+        );
         return {
           correctedText: text,
           confidence: 0,
           wasChanged: false,
-          processingTimeMs: 0
+          processingTimeMs: 0,
         };
       }
 
@@ -154,12 +161,14 @@ export class PostEditorService {
           max_tokens: this.config.maxTokens,
           temperature: this.config.temperature,
           system: systemPrompt,
-          messages: [{
-            role: 'user',
-            content: userPrompt
-          }]
+          messages: [
+            {
+              role: 'user',
+              content: userPrompt,
+            },
+          ],
         }),
-        this.createTimeoutPromise(this.config.timeoutMs)
+        this.createTimeoutPromise(this.config.timeoutMs),
       ]);
 
       const content = response.content[0];
@@ -174,16 +183,15 @@ export class PostEditorService {
         original_length: text.length,
         corrected_length: result.corrected_text.length,
         was_changed: result.was_changed,
-        processing_time: processingTime + 'ms'
+        processing_time: processingTime + 'ms',
       });
 
       return {
         correctedText: result.corrected_text,
         wasChanged: result.was_changed,
         confidence: result.confidence,
-        processingTimeMs: processingTime
+        processingTimeMs: processingTime,
       };
-
     } catch (error) {
       const processingTime = Date.now() - startTime;
       console.warn('⚠️ Post-editing failed:', error);
@@ -193,7 +201,7 @@ export class PostEditorService {
         correctedText: text,
         wasChanged: false,
         confidence: 0,
-        processingTimeMs: processingTime
+        processingTimeMs: processingTime,
       };
     }
   }
@@ -202,10 +210,10 @@ export class PostEditorService {
   private detectLanguage(text: string): 'ru' | 'en' | 'mixed' {
     const cyrillicPattern = /[а-яё]/i;
     const latinPattern = /[a-z]/i;
-    
+
     const hasCyrillic = cyrillicPattern.test(text);
     const hasLatin = latinPattern.test(text);
-    
+
     if (hasCyrillic && hasLatin) return 'mixed';
     if (hasCyrillic) return 'ru';
     return 'en';
@@ -275,7 +283,7 @@ export class PostEditorService {
 
   private calculateAnalysisConfidence(analysis: SegmentAnalysis): number {
     let confidence = 0.5; // Base confidence
-    
+
     if (analysis.reasons.includes('low_confidence')) confidence += 0.2;
     if (analysis.reasons.includes('mixed_language')) confidence += 0.15;
     if (analysis.reasons.includes('technical_terms')) confidence += 0.1;
@@ -374,27 +382,27 @@ export const createPostEditorService = (
     jobTerms: [], // Будет добавлено позже
     synonymDictionary: {
       // Примеры синонимов и транскрипций
-      'кубер': 'Kubernetes',
-      'кубернетес': 'Kubernetes',
-      'постгрес': 'PostgreSQL',
-      'постгресс': 'PostgreSQL',
-      'реакт': 'React',
-      'нод': 'Node.js',
-      'ноде': 'Node.js',
-      'тайпскрипт': 'TypeScript',
-      'джаваскрипт': 'JavaScript',
-      'гит': 'Git',
-      'гитхаб': 'GitHub',
-      'докер': 'Docker',
-      'монго': 'MongoDB',
-      'редис': 'Redis',
-      'эластик': 'Elasticsearch',
-      'апи': 'API',
-      'рест': 'REST',
-      'джсон': 'JSON',
-      'хтмл': 'HTML',
-      'цсс': 'CSS'
-    }
+      кубер: 'Kubernetes',
+      кубернетес: 'Kubernetes',
+      постгрес: 'PostgreSQL',
+      постгресс: 'PostgreSQL',
+      реакт: 'React',
+      нод: 'Node.js',
+      ноде: 'Node.js',
+      тайпскрипт: 'TypeScript',
+      джаваскрипт: 'JavaScript',
+      гит: 'Git',
+      гитхаб: 'GitHub',
+      докер: 'Docker',
+      монго: 'MongoDB',
+      редис: 'Redis',
+      эластик: 'Elasticsearch',
+      апи: 'API',
+      рест: 'REST',
+      джсон: 'JSON',
+      хтмл: 'HTML',
+      цсс: 'CSS',
+    },
   };
 
   const mergedContext = { ...defaultContext, ...context };

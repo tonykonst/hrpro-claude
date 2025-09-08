@@ -1,6 +1,6 @@
 /**
  * WindowManager - Централизованное управление окнами приложения
- * 
+ *
  * Принципы:
  * - Единый источник истины для всех окон
  * - Реактивное управление жизненным циклом
@@ -80,20 +80,22 @@ export class WindowManager extends EventEmitter {
       }
 
       console.log('📱 [WindowManager] Creating data window...');
-      
+
       // Отправляем запрос на создание окна в main процесс
       if (window.electronAPI) {
-        console.log('📡 [WindowManager] Using electronAPI to create data window');
+        console.log(
+          '📡 [WindowManager] Using electronAPI to create data window'
+        );
         const result = await window.electronAPI.createDataWindow();
         console.log('📡 [WindowManager] Create data window result:', result);
-        
+
         // Устанавливаем начальное состояние
         this.windowStates.set('data', {
           isVisible: true,
           isRecording: this.recordingState,
-          hasData: false
+          hasData: false,
         });
-        
+
         this.emit('window-created', 'data');
         console.log('✅ [WindowManager] Data window created successfully');
       } else {
@@ -117,15 +119,15 @@ export class WindowManager extends EventEmitter {
       }
 
       console.log('👁️ [WindowManager] Hiding data window...');
-      
+
       if (window.electronAPI) {
         console.log('📡 [WindowManager] Using electronAPI to hide data window');
         await window.electronAPI.closeDataWindow(); // ← Теперь это скрывает окно!
-        
+
         // НЕ удаляем из windows - окно остается живым!
         // this.windows.delete('data');
         // this.windowStates.delete('data');
-        
+
         this.emit('window-closed', 'data');
         console.log('✅ [WindowManager] Data window hidden successfully');
       } else {
@@ -144,17 +146,19 @@ export class WindowManager extends EventEmitter {
   public setRecordingState(isRecording: boolean): void {
     const previousState = this.recordingState;
     this.recordingState = isRecording;
-    
-    console.log(`🎤 [WindowManager] Recording state changed: ${previousState} → ${isRecording}`);
-    
+
+    console.log(
+      `🎤 [WindowManager] Recording state changed: ${previousState} → ${isRecording}`
+    );
+
     // Обновляем состояние всех окон
     this.windowStates.forEach((state, windowId) => {
       state.isRecording = isRecording;
       this.windowStates.set(windowId, state);
     });
-    
+
     this.emit('recording-state-changed', isRecording);
-    
+
     // Автоматически управляем окном данных
     this.handleDataWindowLifecycle(isRecording);
   }
@@ -209,14 +213,14 @@ export class WindowManager extends EventEmitter {
         this.windows.set(windowId, { id: windowId });
         console.log(`📱 [WindowManager] Window ${windowId} registered`);
       };
-      
+
       // Окно закрыто
       const handleWindowClosed = (windowId: string) => {
         this.windows.delete(windowId);
         this.windowStates.delete(windowId);
         console.log(`📱 [WindowManager] Window ${windowId} unregistered`);
       };
-      
+
       // Регистрируем слушатели через electronAPI
       window.electronAPI.onWindowCreated(handleWindowCreated);
       window.electronAPI.onWindowClosed(handleWindowClosed);

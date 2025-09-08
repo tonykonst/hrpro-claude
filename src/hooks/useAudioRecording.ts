@@ -4,10 +4,10 @@ import { configService } from '../services/config';
 export interface UseAudioRecordingReturn {
   // Состояния
   hasPermission: boolean;
-  
+
   // Методы
   setHasPermission: (hasPermission: boolean) => void;
-  
+
   // Основные функции
   checkMicPermission: () => Promise<void>;
 }
@@ -21,15 +21,22 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
     try {
       console.log('🎤 [useAudioRecording] Checking microphone permission...');
       const audioConstraints = configService.getAudioConstraints();
-      console.log('🔧 [useAudioRecording] Audio constraints:', audioConstraints);
-      const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+      console.log(
+        '🔧 [useAudioRecording] Audio constraints:',
+        audioConstraints
+      );
+      const stream =
+        await navigator.mediaDevices.getUserMedia(audioConstraints);
       console.log('✅ [useAudioRecording] Microphone permission granted!');
       setHasPermission(true);
       console.log('🔄 [useAudioRecording] hasPermission set to true');
       stream.getTracks().forEach(track => track.stop());
       console.log('🛑 [useAudioRecording] Stream tracks stopped');
     } catch (error) {
-      console.error('❌ [useAudioRecording] Microphone permission denied:', error);
+      console.error(
+        '❌ [useAudioRecording] Microphone permission denied:',
+        error
+      );
       setHasPermission(false);
       console.log('🔄 [useAudioRecording] hasPermission set to false');
     }
@@ -38,11 +45,11 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
   return {
     // Состояния
     hasPermission,
-    
+
     // Методы
     setHasPermission,
-    
+
     // Основные функции
-    checkMicPermission
+    checkMicPermission,
   };
 };

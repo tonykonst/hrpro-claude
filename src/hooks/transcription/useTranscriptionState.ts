@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { LegacyInsight } from '../../types/events';
 
 /**
@@ -15,6 +15,10 @@ export const useTranscriptionState = () => {
   const [partialTranscript, setPartialTranscriptState] = useState<string>('');
   const [insights, setInsightsState] = useState<LegacyInsight[]>([]);
   const [isRecording, setIsRecordingState] = useState<boolean>(false);
+  
+  // Refs для MemoryManager
+  const transcriptRef = useRef<string[]>([]);
+  const insightsRef = useRef<LegacyInsight[]>([]);
 
   // Обертки для сеттеров с поддержкой функций
   const setTranscript = useCallback((value: string | ((prev: string) => string)) => {
@@ -22,6 +26,8 @@ export const useTranscriptionState = () => {
       setTranscriptState(value);
     } else {
       setTranscriptState(value);
+      // Обновляем ref для MemoryManager
+      transcriptRef.current = value.split(' ');
     }
   }, []);
 
@@ -38,6 +44,8 @@ export const useTranscriptionState = () => {
       setInsightsState(value);
     } else {
       setInsightsState(value);
+      // Обновляем ref для MemoryManager
+      insightsRef.current = value;
     }
   }, []);
 
@@ -60,6 +68,10 @@ export const useTranscriptionState = () => {
     setTranscript,
     setPartialTranscript,
     setInsights,
-    setIsRecording
+    setIsRecording,
+    
+    // Refs для MemoryManager
+    transcriptRef,
+    insightsRef
   };
 };

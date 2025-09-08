@@ -3,25 +3,26 @@ import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import "./styles/globals.css";
 import "./styles/components.css";
+import { Logger } from "./utils/logger";
 
-console.log('🎯 Main.tsx loaded');
+Logger.info('Main.tsx loaded');
 
 try {
   // Создаем и рендерим приложение
-  console.log('🎯 Creating React root...');
+  Logger.debug('Creating React root...');
   const root = ReactDOM.createRoot(
     document.getElementById("root") as HTMLElement
   );
 
-  console.log('🎯 Rendering App component...');
+  Logger.debug('Rendering App component...');
   root.render(
     <React.StrictMode>
       <App />
     </React.StrictMode>
   );
-  console.log('✅ App rendered successfully');
+  Logger.info('App rendered successfully');
 } catch (error) {
-  console.error('❌ Failed to render App:', error);
+  Logger.error('Failed to render App', { error: error instanceof Error ? error.message : String(error) });
 }
 
 // Скрываем загрузочный экран

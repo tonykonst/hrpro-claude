@@ -51,7 +51,9 @@ export const useTranscription = () => {
     claudeRef: services.claudeRef,
     analysisContextRef: services.analysisContextRef,
     cleanupRef: services.cleanupRef,
-    handleTranscriptEvent: callbacks.handleTranscriptEvent
+    handleTranscriptEvent: callbacks.handleTranscriptEvent,
+    transcriptRef: state.transcriptRef,
+    insightsRef: state.insightsRef
   });
   
   // Recording functionality

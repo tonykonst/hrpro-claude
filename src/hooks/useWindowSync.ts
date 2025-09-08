@@ -7,13 +7,15 @@ import { useEffect } from 'react';
  * Обрабатывает отправку и получение данных между control и data окнами
  */
 export const useWindowSync = (windowType: 'control' | 'data') => {
-  
   // Функция для отправки данных в окно транскрипции (только для control окна)
-  const sendToDataWindow = (type: 'transcript' | 'insights' | 'recording-state', data: any) => {
+  const sendToDataWindow = (
+    type: 'transcript' | 'insights' | 'recording-state',
+    data: any
+  ) => {
     try {
       if (window.electronAPI && windowType !== 'data') {
         console.log(`📤 [IPC] Sending ${type} to data window:`, data);
-        
+
         if (type === 'transcript') {
           window.electronAPI.sendTranscript(data);
         } else if (type === 'insights') {
@@ -56,7 +58,10 @@ export const useWindowSync = (windowType: 'control' | 'data') => {
 
       // Слушаем изменения состояния записи
       const handleRecordingStateChange = (isRecordingState: boolean) => {
-        console.log('🎤 [DATA WINDOW] Recording state change:', isRecordingState);
+        console.log(
+          '🎤 [DATA WINDOW] Recording state change:',
+          isRecordingState
+        );
         // Здесь будет логика обновления состояний
       };
 

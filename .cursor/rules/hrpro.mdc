@@ -18,7 +18,12 @@ Interview Assistant is an Electron-based desktop application for HR specialists 
 * Answers must be short, structured, in JSON or Markdown format (depending on task).
 * Data is used only to help HR; the final decision remains with the human.
 * Style: neutral, professional, no marketing phrases.
-* Interviews average 1 hour. Latency must be low: insights every 2–4 seconds in small chunks.
+<!-- СТАРОЕ ПРАВИЛО - ЗАКОММЕНТИРОВАНО ДЛЯ ПУБЛИЧНОГО СЕРВИСА -->
+<!-- * Interviews average 1 hour. Latency must be low: insights every 2–4 seconds in small chunks. -->
+<!-- НОВОЕ ПРАВИЛО: Публичный сервис должен поддерживать сессии до 3+ часов -->
+* Публичный сервис должен поддерживать длительные сессии (до 3+ часов)
+* Адаптивная частота инсайтов: 2-4 секунды в начале, 5-10 секунд в длительных сессиях
+* Автоматическое управление памятью для предотвращения утечек
 
 **CRITICAL RULE - NO FAKE DATA:**
 
@@ -231,9 +236,16 @@ Control Panel (recording) → IPC → Data Window (display) → Real-time update
 
 ## Security
 
-* Store only text + aggregates
-* Mask PII
-* Tokenized report links
+<!-- СТАРОЕ ПРАВИЛО - ЗАКОММЕНТИРОВАНО ДЛЯ ПУБЛИЧНОГО СЕРВИСА -->
+<!-- * Store only text + aggregates -->
+<!-- * Mask PII -->
+<!-- * Tokenized report links -->
+<!-- НОВОЕ ПРАВИЛО: Расширенное хранение для публичного сервиса -->
+* Хранить текст, агрегаты, метаданные сессий, метрики производительности
+* Автоматическая ротация логов и очистка старых данных
+* Архивирование важных сессий с возможностью восстановления
+* Маскировать PII в логах и отчетах
+* Шифрование чувствительных данных при необходимости
 
 ---
 
@@ -381,3 +393,479 @@ src/hooks/transcription/
 ---
 
 This document captures the Interview Assistant project v0.51 with current architecture, implementation status, and detailed technical specifications. The system is a fully functional Electron desktop application with modular architecture, real-time AI analysis, and comprehensive error handling.
+
+---
+
+## 🏗️ **АРХИТЕКТУРНЫЕ ПРИНЦИПЫ И СТАНДАРТЫ**
+
+### **1. Модульная архитектура (ОБЯЗАТЕЛЬНО)**
+
+**Принципы разделения:**
+* **ui/** - Переиспользуемые UI компоненты (Button, Panel, Transcript, Insights)
+* **control/** - Компоненты панели управления (ControlPanel, StartButton, StopButton, DragZone)
+* **data/** - Компоненты окна данных (DataWindow, TranscriptSection, InsightsSection)
+* **common/** - Общие компоненты (WaveLoader, RecordingIndicator)
+* **services/** - Бизнес-логика и интеграции с внешними API
+* **hooks/** - Специализированные хуки для управления состоянием
+
+**Правила модульности:**
+* ✅ Каждый модуль должен иметь четкую ответственность
+* ✅ Модули не должны зависеть друг от друга напрямую
+* ✅ Общение между модулями только через события и интерфейсы
+* ✅ Каждый модуль должен иметь index.ts для экспорта
+* ❌ НЕ создавать циклические зависимости между модулями
+
+### **2. Строгая типизация (ОБЯЗАТЕЛЬНО)**
+
+**Интерфейсы сервисов:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Все сервисы должны реализовывать интерфейсы
+export interface ITranscriptionService {
+  connect(): Promise<void>;
+  disconnect(): void;
+  sendAudio(audioData: ArrayBuffer): void;
+  onTranscript(callback: (event: TranscriptEvent) => void): void;
+  onError(callback: (error: string) => void): void;
+}
+
+export interface IAnalysisService {
+  analyzeTranscript(request: AnalysisRequest): Promise<InsightResponse>;
+  isConfigured(): boolean;
+}
+
+export interface IConfigService {
+  getConfig(): AppConfig;
+  isServiceConfigured(service: string): boolean;
+}
+```
+
+**Правила типизации:**
+* ✅ Все публичные методы должны иметь строгие типы
+* ✅ Использовать generic типы для переиспользуемых компонентов
+* ✅ Создавать отдельные типы для API запросов/ответов
+* ✅ Использовать union types для ограниченных значений
+* ❌ НЕ использовать `any` без крайней необходимости
+* ❌ НЕ использовать `@ts-ignore` без комментария с объяснением
+
+### **3. Обработка ошибок (ОБЯЗАТЕЛЬНО)**
+
+**Структурированные ошибки:**
+```typescript
+export class AppError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public retriable: boolean = false,
+    public context?: Record<string, any>
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+// ОБЯЗАТЕЛЬНО: Все async операции должны обрабатывать ошибки
+export class ErrorHandler {
+  static async withRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    delay: number = 1000
+  ): Promise<T> {
+    // Implementation with exponential backoff
+  }
+}
+```
+
+**Правила обработки ошибок:**
+* ✅ Все async функции должны иметь try/catch блоки
+* ✅ Использовать AppError для структурированных ошибок
+* ✅ Логировать ошибки с контекстом
+* ✅ Предоставлять fallback механизмы
+* ✅ Не блокировать UI при ошибках сервисов
+* ❌ НЕ игнорировать ошибки (catch без обработки)
+
+---
+
+## 🔒 **СТАНДАРТЫ БЕЗОПАСНОСТИ**
+
+### **1. Electron Security (КРИТИЧНО)**
+
+**Обязательные настройки:**
+```typescript
+webPreferences: {
+  nodeIntegration: false,        // ✅ ОБЯЗАТЕЛЬНО
+  contextIsolation: true,        // ✅ ОБЯЗАТЕЛЬНО
+  webSecurity: true,             // ✅ ОБЯЗАТЕЛЬНО
+  backgroundThrottling: false,   // Для стабильности
+  enableRemoteModule: false,     // ✅ ОБЯЗАТЕЛЬНО
+  preload: path.join(__dirname, '..', 'preload', 'preload.js')
+}
+```
+
+**Preload Script Security:**
+```typescript
+// ✅ БЕЗОПАСНО: Только через contextBridge
+contextBridge.exposeInMainWorld('electronAPI', {
+  getConfig: () => Promise.resolve({
+    env: {
+      DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY || '',
+      CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
+    }
+  })
+});
+
+// ❌ НЕБЕЗОПАСНО: Прямая передача API ключей
+// contextBridge.exposeInMainWorld('apiKeys', process.env);
+```
+
+### **2. API Key Protection (КРИТИЧНО)**
+
+**Правила работы с API ключами:**
+* ✅ API ключи ТОЛЬКО через environment variables
+* ✅ Передача через preload script с contextBridge
+* ✅ НЕ включать API ключи в bundle
+* ✅ Валидация ключей при инициализации
+* ✅ Fallback в mock режим при отсутствии ключей
+* ❌ НЕ хардкодить API ключи в коде
+* ❌ НЕ логировать API ключи в консоль
+
+### **3. Data Privacy (КРИТИЧНО)**
+
+**Обработка персональных данных:**
+* ✅ Все данные хранятся локально (файловая система)
+* ✅ НЕ передавать аудио данные на внешние серверы (кроме Deepgram)
+* ✅ Маскировать PII в логах
+* ✅ Автоматическое удаление временных файлов
+* ✅ Шифрование чувствительных данных при необходимости
+* ❌ НЕ сохранять аудио файлы на диск
+* ❌ НЕ передавать транскрипты на внешние сервисы (кроме Claude)
+
+---
+
+## ⚡ **ПРОИЗВОДИТЕЛЬНОСТЬ И МАСШТАБИРУЕМОСТЬ**
+
+### **1. Long-Running Sessions (КРИТИЧНО для публичного сервиса)**
+
+**Управление памятью:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Ограничение размера буферов
+export class MemoryManager {
+  private static readonly MAX_TRANSCRIPT_WORDS = 1000;
+  private static readonly MAX_INSIGHTS_HISTORY = 50;
+  private static readonly MAX_AUDIO_BUFFER_SIZE = 1024 * 1024; // 1MB
+  
+  static cleanupOldData(transcript: string[], insights: Insight[]): void {
+    // Удаление старых данных для предотвращения утечек памяти
+  }
+}
+```
+
+**Правила для длительных сессий:**
+* ✅ Ограничивать размер буферов транскриптов (максимум 1000 слов)
+* ✅ Ограничивать историю инсайтов (максимум 50 записей)
+* ✅ Периодическая очистка неиспользуемых данных
+* ✅ Мониторинг использования памяти
+* ✅ Graceful degradation при нехватке ресурсов
+* ❌ НЕ накапливать неограниченные объемы данных
+
+### **2. Real-time Performance (КРИТИЧНО)**
+
+**AudioWorklet Optimization:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Неблокирующая обработка аудио
+class PCMProcessor extends AudioWorkletProcessor {
+  process(inputs, outputs, parameters) {
+    // Быстрая конвертация Float32 → Int16
+    // Минимальная обработка в worklet
+    return true;
+  }
+}
+```
+
+**Правила производительности:**
+* ✅ Использовать AudioWorklet для обработки аудио
+* ✅ Rate limiting для API вызовов (максимум 3 запроса/сек)
+* ✅ Timeout для всех async операций (максимум 500ms)
+* ✅ Экспоненциальное сглаживание метрик
+* ✅ Lazy loading компонентов
+* ❌ НЕ блокировать main thread длительными операциями
+* ❌ НЕ делать синхронные API вызовы
+
+### **3. Adaptive Systems (ОБЯЗАТЕЛЬНО)**
+
+**Адаптивная система ASR:**
+```typescript
+export class AdaptiveASRManager {
+  // ОБЯЗАТЕЛЬНО: Динамическая оптимизация параметров
+  getAdaptiveParameters(): {
+    endpointing: number,
+    interim_results_period: number,
+    confidence_threshold: number
+  } {
+    // Адаптация на основе качества распознавания
+  }
+}
+```
+
+**Правила адаптивности:**
+* ✅ Динамическая оптимизация параметров ASR
+* ✅ Адаптация к качеству аудио
+* ✅ Автоматическое переключение моделей при необходимости
+* ✅ Мониторинг метрик производительности
+* ✅ Fallback на более простые алгоритмы при проблемах
+* ❌ НЕ использовать фиксированные параметры для всех сценариев
+
+---
+
+## 🧪 **ТЕСТИРОВАНИЕ И КАЧЕСТВО КОДА**
+
+### **1. Testing Pyramid (ОБЯЗАТЕЛЬНО)**
+
+**Структура тестов:**
+* **Unit Tests** - Тестирование отдельных функций и компонентов
+* **Integration Tests** - Тестирование взаимодействия между модулями
+* **E2E Tests** - Тестирование полных пользовательских сценариев
+* **Performance Tests** - Тестирование производительности и памяти
+
+**Правила тестирования:**
+* ✅ Покрытие тестами минимум 80% кода
+* ✅ Тестирование всех публичных API
+* ✅ Mock внешних сервисов в unit тестах
+* ✅ Тестирование error handling
+* ✅ Performance budgets для критических операций
+* ❌ НЕ тестировать implementation details
+* ❌ НЕ создавать тесты без assertions
+
+### **2. Code Quality Standards (ОБЯЗАТЕЛЬНО)**
+
+**ESLint Configuration:**
+```json
+{
+  "extends": [
+    "@typescript-eslint/recommended",
+    "react-hooks/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": "error",
+    "react-hooks/exhaustive-deps": "error"
+  }
+}
+```
+
+**Правила качества кода:**
+* ✅ Использовать TypeScript strict mode
+* ✅ Следовать ESLint правилам
+* ✅ Использовать Prettier для форматирования
+* ✅ Комментировать сложную бизнес-логику
+* ✅ Использовать meaningful имена переменных и функций
+* ❌ НЕ использовать console.log в production коде
+* ❌ НЕ создавать функции длиннее 50 строк
+
+---
+
+## 📊 **МОНИТОРИНГ И ЛОГИРОВАНИЕ**
+
+### **1. Structured Logging (ОБЯЗАТЕЛЬНО)**
+
+**Формат логов:**
+```typescript
+interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  service: string;
+  message: string;
+  context?: Record<string, any>;
+  sessionId?: string;
+}
+
+// ОБЯЗАТЕЛЬНО: Структурированное логирование
+export class Logger {
+  static log(level: LogLevel, message: string, context?: any): void {
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      service: this.getServiceName(),
+      message,
+      context: this.sanitizeContext(context)
+    };
+    
+    console.log(JSON.stringify(entry));
+  }
+}
+```
+
+**Правила логирования:**
+* ✅ Использовать структурированные JSON логи
+* ✅ Включать timestamp и session ID
+* ✅ Логировать все ошибки с контекстом
+* ✅ Маскировать чувствительные данные
+* ✅ Разные уровни логирования (debug, info, warn, error)
+* ❌ НЕ логировать API ключи или пароли
+* ❌ НЕ использовать console.log для production логирования
+
+### **2. Performance Monitoring (ОБЯЗАТЕЛЬНО)**
+
+**Метрики для мониторинга:**
+```typescript
+interface PerformanceMetrics {
+  audioLatency: number;        // Задержка обработки аудио
+  transcriptionLatency: number; // Задержка транскрипции
+  analysisLatency: number;     // Задержка анализа
+  memoryUsage: number;         // Использование памяти
+  errorRate: number;           // Частота ошибок
+  sessionDuration: number;     // Длительность сессии
+}
+```
+
+**Правила мониторинга:**
+* ✅ Мониторить критические метрики производительности
+* ✅ Алерты при превышении лимитов
+* ✅ Сбор метрик в реальном времени
+* ✅ Анализ трендов производительности
+* ✅ Автоматическое масштабирование при необходимости
+* ❌ НЕ собирать метрики без цели
+* ❌ НЕ игнорировать предупреждения о производительности
+
+---
+
+## 🚀 **DEPLOYMENT И CI/CD**
+
+### **1. Build Process (ОБЯЗАТЕЛЬНО)**
+
+**Структура сборки:**
+```json
+{
+  "scripts": {
+    "build": "npm run build:vite && npm run build:electron",
+    "build:vite": "vite build",
+    "build:electron": "tsc -p tsconfig.main.json",
+    "test": "jest",
+    "test:e2e": "playwright test",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  }
+}
+```
+
+**Правила сборки:**
+* ✅ Автоматическая проверка типов TypeScript
+* ✅ Линтинг кода перед сборкой
+* ✅ Запуск тестов перед деплоем
+* ✅ Минификация для production
+* ✅ Source maps для debugging
+* ❌ НЕ деплоить код с ошибками линтера
+* ❌ НЕ деплоить код с failing тестами
+
+### **2. Environment Management (ОБЯЗАТЕЛЬНО)**
+
+**Конфигурация окружений:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Разделение конфигураций по окружениям
+export const getEnvironmentConfig = (env: string) => {
+  switch (env) {
+    case 'development':
+      return { debug: true, mockApis: true };
+    case 'staging':
+      return { debug: false, mockApis: false, rateLimit: 1 };
+    case 'production':
+      return { debug: false, mockApis: false, rateLimit: 3 };
+    default:
+      throw new Error(`Unknown environment: ${env}`);
+  }
+};
+```
+
+**Правила окружений:**
+* ✅ Разделение конфигураций по окружениям
+* ✅ Валидация конфигурации при запуске
+* ✅ Fallback значения для всех настроек
+* ✅ Безопасное хранение секретов
+* ✅ Автоматическое переключение между окружениями
+* ❌ НЕ использовать production конфигурацию в development
+* ❌ НЕ хардкодить environment-specific значения
+
+---
+
+## 📋 **COMPLIANCE И ПРАВОВЫЕ ТРЕБОВАНИЯ**
+
+### **1. GDPR Compliance (КРИТИЧНО для публичного сервиса)**
+
+**Обработка персональных данных:**
+* ✅ Минимизация сбора данных (только необходимые)
+* ✅ Локальное хранение всех данных
+* ✅ Автоматическое удаление после сессии
+* ✅ Право на удаление данных
+* ✅ Прозрачность обработки данных
+* ✅ Согласие пользователя на обработку
+* ❌ НЕ передавать данные третьим лицам без согласия
+* ❌ НЕ хранить данные дольше необходимого
+
+### **2. Security Audits (ОБЯЗАТЕЛЬНО)**
+
+**Регулярные проверки:**
+* ✅ Автоматическое сканирование уязвимостей
+* ✅ Аудит зависимостей (npm audit)
+* ✅ Проверка API ключей на утечки
+* ✅ Тестирование на проникновение
+* ✅ Анализ кода на уязвимости
+* ✅ Мониторинг подозрительной активности
+* ❌ НЕ игнорировать security warnings
+* ❌ НЕ использовать устаревшие зависимости
+
+---
+
+## ⚠️ **ВАЖНЫЕ ПРЕДУПРЕЖДЕНИЯ**
+
+### **1. Противоречия с существующими правилами**
+
+**ЗАКОММЕНТИРОВАННЫЕ СТАРЫЕ ПРАВИЛА:**
+* Старые правила закомментированы в соответствующих разделах выше
+* Все изменения отмечены комментариями с объяснением причин
+* Новые правила адаптированы для публичного сервиса с длительными сессиями
+
+### **2. Критические изменения для публичного сервиса**
+
+**Масштабируемость:**
+* ✅ Поддержка множественных одновременных сессий
+* ✅ Автоматическое управление ресурсами
+* ✅ Graceful degradation при высокой нагрузке
+* ✅ Мониторинг и алертинг
+
+**Надежность:**
+* ✅ Автоматическое восстановление после сбоев
+* ✅ Backup и recovery механизмы
+* ✅ Health checks и monitoring
+* ✅ Circuit breaker pattern для внешних API
+
+**Безопасность:**
+* ✅ Аутентификация и авторизация пользователей
+* ✅ Шифрование данных в покое и в передаче
+* ✅ Аудит доступа и действий пользователей
+* ✅ Защита от DDoS и других атак
+
+---
+
+## 📚 **ДОПОЛНИТЕЛЬНЫЕ РЕСУРСЫ**
+
+### **1. Документация**
+* **Полная документация:** DOCS/DOCUMENTATION.md (2,349 строк)
+* **Архитектурные решения:** DOCS/ARCHITECTURE.md
+* **API документация:** DOCS/API.md
+* **Security guidelines:** DOCS/SECURITY.md
+
+### **2. Инструменты разработки**
+* **TypeScript:** Строгая типизация
+* **ESLint:** Линтинг кода
+* **Prettier:** Форматирование
+* **Jest:** Unit тестирование
+* **Playwright:** E2E тестирование
+
+### **3. Мониторинг**
+* **Performance metrics:** Real-time мониторинг
+* **Error tracking:** Автоматическое отслеживание ошибок
+* **Usage analytics:** Анализ использования
+* **Security monitoring:** Мониторинг безопасности
+
+---
+
+**ВАЖНО:** Этот документ содержит критические правила для публичного сервиса. Все разработчики ОБЯЗАНЫ следовать этим стандартам. Нарушение правил безопасности или производительности может привести к серьезным проблемам в production среде.

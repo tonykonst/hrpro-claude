@@ -83,7 +83,7 @@ export interface ReportEvent {
 }
 
 // Union type for all events
-export type ApplicationEvent = 
+export type ApplicationEvent =
   | AudioEvent
   | ASREvent
   | InsightEvent
@@ -102,9 +102,9 @@ export interface EventBus {
     eventType: T['type'],
     handler: EventHandler<T>
   ): () => void; // Returns unsubscribe function
-  
+
   emit<T extends ApplicationEvent>(event: T): void;
-  
+
   clear(): void;
 }
 

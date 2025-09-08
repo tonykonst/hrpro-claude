@@ -15,7 +15,9 @@ try {
     path = require('path');
   }
 } catch (error) {
-  console.warn('⚠️ Node.js modules not available, transcript logger will use fallback mode');
+  console.warn(
+    '⚠️ Node.js modules not available, transcript logger will use fallback mode'
+  );
 }
 
 export interface TranscriptEntry {
@@ -51,17 +53,19 @@ export class TranscriptLogger {
     total_segments: 0,
     avg_confidence: 0,
     language_distribution: {},
-    corrections_count: 0
+    corrections_count: 0,
   };
 
   constructor(baseDir: string = './logs') {
     if (!this.isFileSystemAvailable()) {
-      console.warn('📝 Transcript logger running in memory-only mode (file system not available)');
+      console.warn(
+        '📝 Transcript logger running in memory-only mode (file system not available)'
+      );
       this.logsDir = baseDir;
       this.startNewSession();
       return;
     }
-    
+
     this.logsDir = path.resolve(baseDir);
     this.ensureLogsDirectory();
     this.startNewSession();
@@ -73,7 +77,7 @@ export class TranscriptLogger {
 
   private ensureLogsDirectory(): void {
     if (!this.isFileSystemAvailable()) return;
-    
+
     if (!fs.existsSync(this.logsDir)) {
       fs.mkdirSync(this.logsDir, { recursive: true });
       console.log('📁 Created transcript logs directory:', this.logsDir);
@@ -84,14 +88,14 @@ export class TranscriptLogger {
     this.currentSessionId = this.generateSessionId();
     this.sessionStartTime = Date.now();
     this.transcriptEntries = [];
-    
+
     this.sessionMetadata = {
       session_id: this.currentSessionId,
       start_time: this.sessionStartTime,
       total_segments: 0,
       avg_confidence: 0,
       language_distribution: {},
-      corrections_count: 0
+      corrections_count: 0,
     };
 
     console.log('📝 Started new transcript session:', this.currentSessionId);
@@ -108,7 +112,7 @@ export class TranscriptLogger {
   logTranscript(entry: Omit<TranscriptEntry, 'session_id'>): void {
     const fullEntry: TranscriptEntry = {
       ...entry,
-      session_id: this.currentSessionId
+      session_id: this.currentSessionId,
     };
 
     this.transcriptEntries.push(fullEntry);
@@ -120,22 +124,23 @@ export class TranscriptLogger {
     console.log('📝 Logged transcript:', {
       type: entry.type,
       text: entry.text.substring(0, 50) + (entry.text.length > 50 ? '...' : ''),
-      confidence: entry.confidence
+      confidence: entry.confidence,
     });
   }
 
   // Обновление метаданных сессии
   private updateSessionMetadata(entry: TranscriptEntry): void {
     this.sessionMetadata.total_segments++;
-    
+
     // Обновляем среднюю уверенность
     const prevAvg = this.sessionMetadata.avg_confidence;
     const count = this.sessionMetadata.total_segments;
-    this.sessionMetadata.avg_confidence = (prevAvg * (count - 1) + entry.confidence) / count;
+    this.sessionMetadata.avg_confidence =
+      (prevAvg * (count - 1) + entry.confidence) / count;
 
     // Обновляем распределение языков
     if (entry.language) {
-      this.sessionMetadata.language_distribution[entry.language] = 
+      this.sessionMetadata.language_distribution[entry.language] =
         (this.sessionMetadata.language_distribution[entry.language] || 0) + 1;
     }
 
@@ -151,16 +156,20 @@ export class TranscriptLogger {
       // В fallback режиме просто логируем в консоль
       const timestamp = new Date(entry.timestamp).toLocaleTimeString();
       if (entry.type === 'corrected') {
-        console.log(`📝 ${timestamp} [CORRECTED] ${entry.original_text} → ${entry.text}`);
+        console.log(
+          `📝 ${timestamp} [CORRECTED] ${entry.original_text} → ${entry.text}`
+        );
       } else {
-        console.log(`📝 ${timestamp} [${entry.type.toUpperCase()}] ${entry.text} (conf: ${entry.confidence.toFixed(2)})`);
+        console.log(
+          `📝 ${timestamp} [${entry.type.toUpperCase()}] ${entry.text} (conf: ${entry.confidence.toFixed(2)})`
+        );
       }
       return;
     }
 
     const mdPath = path.join(this.logsDir, `${this.currentSessionId}.md`);
     const timestamp = new Date(entry.timestamp).toLocaleTimeString();
-    
+
     let mdEntry = '';
 
     if (entry.type === 'partial') {
@@ -197,17 +206,21 @@ export class TranscriptLogger {
   // Завершение сессии и сохранение финального отчета
   endSession(): void {
     this.sessionMetadata.end_time = Date.now();
-    const duration = (this.sessionMetadata.end_time - this.sessionStartTime) / 1000 / 60; // минуты
+    const duration =
+      (this.sessionMetadata.end_time - this.sessionStartTime) / 1000 / 60; // минуты
 
     if (this.isFileSystemAvailable()) {
       // Добавляем статистику в конец MD файла
       const mdPath = path.join(this.logsDir, `${this.currentSessionId}.md`);
       const stats = this.generateSessionStats(duration);
-      
+
       fs.appendFileSync(mdPath, stats);
 
       // Сохраняем JSON метаданные отдельно
-      const jsonPath = path.join(this.logsDir, `${this.currentSessionId}_metadata.json`);
+      const jsonPath = path.join(
+        this.logsDir,
+        `${this.currentSessionId}_metadata.json`
+      );
       fs.writeFileSync(jsonPath, JSON.stringify(this.sessionMetadata, null, 2));
     }
 
@@ -217,7 +230,7 @@ export class TranscriptLogger {
       total_segments: this.sessionMetadata.total_segments,
       avg_confidence: this.sessionMetadata.avg_confidence.toFixed(3),
       corrections: this.sessionMetadata.corrections_count,
-      files_saved: this.isFileSystemAvailable() ? 'yes' : 'memory-only'
+      files_saved: this.isFileSystemAvailable() ? 'yes' : 'memory-only',
     });
 
     // Готовимся к новой сессии
@@ -236,11 +249,14 @@ export class TranscriptLogger {
 **Total Segments:** ${this.sessionMetadata.total_segments}  
 **Average Confidence:** ${this.sessionMetadata.avg_confidence.toFixed(3)}  
 **Corrections Applied:** ${this.sessionMetadata.corrections_count}  
-**Correction Rate:** ${(this.sessionMetadata.corrections_count / this.sessionMetadata.total_segments * 100).toFixed(1)}%
+**Correction Rate:** ${((this.sessionMetadata.corrections_count / this.sessionMetadata.total_segments) * 100).toFixed(1)}%
 
 ### Language Distribution
 ${Object.entries(this.sessionMetadata.language_distribution)
-  .map(([lang, count]) => `- **${lang}:** ${count} segments (${(count / this.sessionMetadata.total_segments * 100).toFixed(1)}%)`)
+  .map(
+    ([lang, count]) =>
+      `- **${lang}:** ${count} segments (${((count / this.sessionMetadata.total_segments) * 100).toFixed(1)}%)`
+  )
   .join('\n')}
 
 ### Quality Metrics
@@ -262,31 +278,35 @@ ${Object.entries(this.sessionMetadata.language_distribution)
 
   // Вспомогательные методы для статистики
   private getHighConfidencePercentage(): number {
-    const highConfidenceCount = this.transcriptEntries.filter(e => e.confidence > 0.9).length;
+    const highConfidenceCount = this.transcriptEntries.filter(
+      e => e.confidence > 0.9
+    ).length;
     return (highConfidenceCount / this.transcriptEntries.length) * 100;
   }
 
   private getLowConfidencePercentage(): number {
-    const lowConfidenceCount = this.transcriptEntries.filter(e => e.confidence < 0.7).length;
+    const lowConfidenceCount = this.transcriptEntries.filter(
+      e => e.confidence < 0.7
+    ).length;
     return (lowConfidenceCount / this.transcriptEntries.length) * 100;
   }
 
   // Получение текущей статистики (для отладки)
   getCurrentStats(): {
-    session_id: string,
-    entries_count: number,
-    avg_confidence: number,
-    duration_minutes: number,
-    corrections_count: number
+    session_id: string;
+    entries_count: number;
+    avg_confidence: number;
+    duration_minutes: number;
+    corrections_count: number;
   } {
     const duration = (Date.now() - this.sessionStartTime) / 1000 / 60;
-    
+
     return {
       session_id: this.currentSessionId,
       entries_count: this.transcriptEntries.length,
       avg_confidence: this.sessionMetadata.avg_confidence,
       duration_minutes: duration,
-      corrections_count: this.sessionMetadata.corrections_count
+      corrections_count: this.sessionMetadata.corrections_count,
     };
   }
 
@@ -312,23 +332,31 @@ ${Object.entries(this.sessionMetadata.language_distribution)
     }
 
     try {
-      const files = fs.readdirSync(this.logsDir)
-        .filter((file: string) => file.startsWith('session_') && file.endsWith('.md'))
+      const files = fs
+        .readdirSync(this.logsDir)
+        .filter(
+          (file: string) => file.startsWith('session_') && file.endsWith('.md')
+        )
         .sort()
         .reverse(); // Новые файлы сначала
 
       const filesToDelete = files.slice(keepLastN);
-      
+
       filesToDelete.forEach((file: string) => {
         const mdPath = path.join(this.logsDir, file);
-        const jsonPath = path.join(this.logsDir, file.replace('.md', '_metadata.json'));
-        
+        const jsonPath = path.join(
+          this.logsDir,
+          file.replace('.md', '_metadata.json')
+        );
+
         if (fs.existsSync(mdPath)) fs.unlinkSync(mdPath);
         if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
       });
 
       if (filesToDelete.length > 0) {
-        console.log(`🧹 Cleaned up ${filesToDelete.length} old transcript sessions`);
+        console.log(
+          `🧹 Cleaned up ${filesToDelete.length} old transcript sessions`
+        );
       }
     } catch (error) {
       console.warn('⚠️ Failed to cleanup old logs:', error);
@@ -346,7 +374,9 @@ export const getTranscriptLogger = (): TranscriptLogger => {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       // В renderer процессе используем fallback
       logsDir = 'transcript-logs';
-      console.log('🔒 [TranscriptLogger] Using fallback directory in secure mode');
+      console.log(
+        '🔒 [TranscriptLogger] Using fallback directory in secure mode'
+      );
     } else if (path) {
       logsDir = path.join(process.cwd(), 'transcript-logs');
     } else {

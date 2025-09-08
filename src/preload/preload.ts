@@ -3,18 +3,19 @@ import { contextBridge, ipcRenderer } from 'electron';
 // Безопасный API для renderer процесса
 contextBridge.exposeInMainWorld('electronAPI', {
   // Базовые методы (пока без IPC handlers)
-  getConfig: () => Promise.resolve({ 
-    audio: { sampleRate: 16000 }, 
-    ui: { theme: 'dark' },
-    // Передаем переменные окружения через preload
-    env: {
-      DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY || '',
-      CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
-      POST_EDITOR_API_KEY: process.env.POST_EDITOR_API_KEY || '',
-      NODE_ENV: process.env.NODE_ENV || 'development'
-    }
-  }),
+  getConfig: () =>
+    Promise.resolve({
+      audio: { sampleRate: 16000 },
+      ui: { theme: 'dark' },
+      // Передаем переменные окружения через preload
+      env: {
+        DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY || '',
+        CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+        POST_EDITOR_API_KEY: process.env.POST_EDITOR_API_KEY || '',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+      },
+    }),
   sendTranscript: (data: any) => {
     console.log('📤 [Preload] Sending transcript via IPC:', data);
     return ipcRenderer.invoke('send-transcript', data);
@@ -29,7 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   createDataWindow: () => ipcRenderer.invoke('create-data-window'),
   closeDataWindow: () => ipcRenderer.invoke('close-data-window'),
-  
+
   // Слушатели событий - УПРОЩЕННАЯ ВЕРСИЯ
   onTranscriptUpdate: (callback: (data: any) => void) => {
     console.log('📡 [Preload] onTranscriptUpdate registered');
@@ -38,7 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(data);
     };
     ipcRenderer.on('transcript-update', handler);
-    
+
     // Возвращаем функцию для очистки
     return () => {
       ipcRenderer.removeListener('transcript-update', handler);
@@ -51,7 +52,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(data);
     };
     ipcRenderer.on('insights-update', handler);
-    
+
     return () => {
       ipcRenderer.removeListener('insights-update', handler);
     };
@@ -63,7 +64,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(data);
     };
     ipcRenderer.on('recording-state-change', handler);
-    
+
     return () => {
       ipcRenderer.removeListener('recording-state-change', handler);
     };
@@ -75,7 +76,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(windowId);
     };
     ipcRenderer.on('window-created', handler);
-    
+
     return () => {
       ipcRenderer.removeListener('window-created', handler);
     };
@@ -87,17 +88,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(windowId);
     };
     ipcRenderer.on('window-closed', handler);
-    
+
     return () => {
       ipcRenderer.removeListener('window-closed', handler);
     };
   },
-  
+
   // Удаление слушателей
   removeAllListeners: (channel: string) => {
     console.log(`📡 [Preload] removeAllListeners called for ${channel}`);
     ipcRenderer.removeAllListeners(channel);
-  }
-  
+  },
+
   // НЕ экспортируем API ключи!
 });

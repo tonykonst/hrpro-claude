@@ -3,25 +3,13 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { RAGService, RAGContext } from './rag';
+import { Logger } from '../utils/logger';
+import { AppError, ErrorHandler } from '../utils/errors';
+import { PerformanceMonitor } from '../utils/performance-monitor';
+import { IAnalysisService, AnalysisRequest, InsightResponse } from '../types/IAnalysisService';
 
-export interface AnalysisRequest {
-  transcript: string;
-  jobDescription?: string;
-  contextWindow: string[]; // Last 15-40s of transcript chunks
-  entities: string[]; // Last 20 technical terms mentioned
-  topicHistory: string[]; // Previous topics discussed
-  ragContext?: RAGContext; // Enhanced context from RAG system
-}
-
-export interface InsightResponse {
-  topic: string;
-  depth_score: number; // 0-1 scale
-  signals: string[]; // Key indicators found
-  followups: string[]; // 1-2 suggested questions
-  note: string; // Short insight (<120 chars)
-  type: 'strength' | 'risk' | 'question';
-  confidence: number;
-}
+// Re-export types from interface for backward compatibility
+export type { AnalysisRequest, InsightResponse } from '../types/IAnalysisService';
 
 export interface ClaudeServiceConfig {
   apiKey: string;
@@ -30,7 +18,7 @@ export interface ClaudeServiceConfig {
   temperature: number;
 }
 
-export class ClaudeAnalysisService {
+export class ClaudeAnalysisService implements IAnalysisService {
   private anthropic: Anthropic | null;
   private systemPrompt: string = '';
   private config: ClaudeServiceConfig;
@@ -39,21 +27,34 @@ export class ClaudeAnalysisService {
   constructor(config: ClaudeServiceConfig, ragService?: RAGService) {
     this.config = config;
     this.ragService = ragService;
-    
+
     // Проверяем, что API ключ есть
     if (!config.apiKey || config.apiKey === 'your_claude_api_key_here') {
-      console.warn('⚠️ [CLAUDE] Claude API key not configured, insights will be disabled');
+      Logger.warn('Claude API key not configured, insights will be disabled');
       this.anthropic = null;
       return;
     }
-    
+
     try {
       this.anthropic = new Anthropic({
         apiKey: config.apiKey,
         dangerouslyAllowBrowser: true, // Разрешаем использование в Electron renderer
       });
     } catch (error) {
-      console.error('❌ [CLAUDE] Failed to initialize Anthropic:', error);
+      const appError = new AppError(
+        'Failed to initialize Anthropic client',
+        'CLAUDE_INIT_ERROR',
+        true, // Retriable
+        { 
+          originalError: error instanceof Error ? error.message : String(error),
+          apiKey: config.apiKey ? 'configured' : 'missing'
+        }
+      );
+      Logger.error('Failed to initialize Anthropic', { 
+        error: appError.message,
+        code: appError.code,
+        context: appError.context
+      });
       this.anthropic = null;
     }
 
@@ -88,40 +89,49 @@ RESPONSE FORMAT (strict JSON):
   }
 
   async analyzeTranscript(request: AnalysisRequest): Promise<InsightResponse> {
+    const analysisMeasurement = PerformanceMonitor.startLatencyMeasurement();
     try {
       // Enhance with RAG context if available
       let enhancedRequest = request;
       if (this.ragService && !request.ragContext) {
         try {
-          const ragContext = await this.ragService.getRelevantContext(request.transcript, {
-            types: ['job_description', 'resume'],
-            maxTokens: 2000,
-            topK: 3
-          });
+          const ragContext = await this.ragService.getRelevantContext(
+            request.transcript,
+            {
+              types: ['job_description', 'resume'],
+              maxTokens: 2000,
+              topK: 3,
+            }
+          );
           enhancedRequest = { ...request, ragContext };
-          
-          console.log('🔍 Enhanced with RAG context:', {
+
+          Logger.info('Enhanced with RAG context', {
             relevantChunks: ragContext.relevantChunks.length,
             totalTokens: ragContext.totalTokens,
-            avgRelevance: ragContext.retrievalMetadata.averageScore.toFixed(3)
+            avgRelevance: ragContext.retrievalMetadata.averageScore.toFixed(3),
           });
         } catch (ragError) {
-          console.warn('⚠️ RAG context retrieval failed, continuing without:', ragError);
+          console.warn(
+            '⚠️ RAG context retrieval failed, continuing without:',
+            ragError
+          );
         }
       }
 
       const userPrompt = this.buildUserPrompt(enhancedRequest);
-      
-      console.log('🤖 Sending to Claude Sonnet 4:', {
+
+      Logger.info('Sending to Claude Sonnet 4', {
         transcript_length: enhancedRequest.transcript.length,
         context_items: enhancedRequest.contextWindow.length,
         entities: enhancedRequest.entities.length,
-        ragContext: !!enhancedRequest.ragContext
+        ragContext: !!enhancedRequest.ragContext,
       });
 
       // Проверяем, что Anthropic инициализирован
       if (!this.anthropic) {
-        console.warn('⚠️ [CLAUDE] Anthropic not initialized, skipping analysis');
+        console.warn(
+          '⚠️ [CLAUDE] Anthropic not initialized, skipping analysis'
+        );
         return {
           note: 'Claude service not available',
           type: 'strength' as const,
@@ -129,7 +139,7 @@ RESPONSE FORMAT (strict JSON):
           confidence: 0,
           depth_score: 0,
           signals: [],
-          followups: []
+          followups: [],
         };
       }
 
@@ -138,10 +148,12 @@ RESPONSE FORMAT (strict JSON):
         max_tokens: this.config.maxTokens,
         temperature: this.config.temperature,
         system: this.systemPrompt,
-        messages: [{
-          role: 'user',
-          content: userPrompt
-        }]
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
       });
 
       const content = response.content[0];
@@ -150,20 +162,23 @@ RESPONSE FORMAT (strict JSON):
       }
 
       const analysis = JSON.parse(content.text) as InsightResponse;
-      
-      console.log('✅ Claude analysis received:', {
+
+      Logger.info('Claude analysis received', {
         topic: analysis.topic,
         depth_score: analysis.depth_score,
         type: analysis.type,
         confidence: analysis.confidence,
-        withRAG: !!enhancedRequest.ragContext
+        withRAG: !!enhancedRequest.ragContext,
       });
 
+      PerformanceMonitor.endLatencyMeasurement(analysisMeasurement, 'analysis');
+      PerformanceMonitor.recordSuccess();
       return analysis;
-
     } catch (error) {
       console.error('❌ Claude analysis error:', error);
-      
+      PerformanceMonitor.endLatencyMeasurement(analysisMeasurement, 'analysis');
+      PerformanceMonitor.recordError();
+
       // Fallback insight on error
       return {
         topic: 'Analysis Error',
@@ -172,7 +187,7 @@ RESPONSE FORMAT (strict JSON):
         followups: [],
         note: 'AI analysis temporarily unavailable',
         type: 'risk',
-        confidence: 0
+        confidence: 0,
       };
     }
   }
@@ -199,18 +214,18 @@ ${request.topicHistory.join(', ') || 'None yet'}`;
 RELEVANT CONTEXT FROM DOCUMENTS:`;
 
       // Group chunks by document type
-      const jobDescChunks = request.ragContext.relevantChunks.filter(chunk => 
-        chunk.source.type === 'job_description'
+      const jobDescChunks = request.ragContext.relevantChunks.filter(
+        (chunk: any) => chunk.source.type === 'job_description'
       );
-      const resumeChunks = request.ragContext.relevantChunks.filter(chunk => 
-        chunk.source.type === 'resume'
+      const resumeChunks = request.ragContext.relevantChunks.filter(
+        (chunk: any) => chunk.source.type === 'resume'
       );
 
       if (jobDescChunks.length > 0) {
         prompt += `
 
 JOB REQUIREMENTS (from job description):`;
-        jobDescChunks.forEach((chunk, index) => {
+        jobDescChunks.forEach((chunk: any, index: number) => {
           prompt += `
 ${index + 1}. ${chunk.content.substring(0, 500)}${chunk.content.length > 500 ? '...' : ''}`;
         });
@@ -220,21 +235,21 @@ ${index + 1}. ${chunk.content.substring(0, 500)}${chunk.content.length > 500 ? '
         prompt += `
 
 CANDIDATE BACKGROUND (from resume):`;
-        resumeChunks.forEach((chunk, index) => {
+        resumeChunks.forEach((chunk: any, index: number) => {
           prompt += `
 ${index + 1}. ${chunk.content.substring(0, 500)}${chunk.content.length > 500 ? '...' : ''}`;
         });
       }
 
       // Add other document types if present
-      const otherChunks = request.ragContext.relevantChunks.filter(chunk => 
-        !['job_description', 'resume'].includes(chunk.source.type)
+      const otherChunks = request.ragContext.relevantChunks.filter(
+        (chunk: any) => !['job_description', 'resume'].includes(chunk.source.type)
       );
       if (otherChunks.length > 0) {
         prompt += `
 
 ADDITIONAL CONTEXT:`;
-        otherChunks.forEach((chunk, index) => {
+        otherChunks.forEach((chunk: any, index: number) => {
           prompt += `
 ${index + 1}. [${chunk.source.type}] ${chunk.content.substring(0, 400)}${chunk.content.length > 400 ? '...' : ''}`;
         });
@@ -263,7 +278,7 @@ OUTPUT: Valid JSON only (no markdown, no explanation).`;
 
   // Aggregate analysis for batch processing
   async analyzeConversation(
-    fullTranscript: string, 
+    fullTranscript: string,
     jobDescription?: string
   ): Promise<{
     summary: string;
@@ -291,13 +306,15 @@ Respond with valid JSON only.`;
     try {
       // Проверяем, что Anthropic инициализирован
       if (!this.anthropic) {
-        console.warn('⚠️ [CLAUDE] Anthropic not initialized, skipping report generation');
+        console.warn(
+          '⚠️ [CLAUDE] Anthropic not initialized, skipping report generation'
+        );
         return {
           summary: 'Claude service not available',
           strengths: [],
           risks: [],
           scores: {},
-          recommendations: ['Configure Claude API key to enable analysis']
+          recommendations: ['Configure Claude API key to enable analysis'],
         };
       }
 
@@ -305,10 +322,12 @@ Respond with valid JSON only.`;
         model: this.config.model,
         max_tokens: 1000, // Больше токенов для полного отчета
         temperature: 0.2, // Более низкая температура для отчетов
-        messages: [{
-          role: 'user',
-          content: reportPrompt
-        }]
+        messages: [
+          {
+            role: 'user',
+            content: reportPrompt,
+          },
+        ],
       });
 
       const content = response.content[0];
@@ -322,11 +341,35 @@ Respond with valid JSON only.`;
       throw error;
     }
   }
+
+  /**
+   * Check if the service is properly configured
+   */
+  isConfigured(): boolean {
+    return this.anthropic !== null && !!this.config.apiKey;
+  }
+
+  /**
+   * Get service configuration status
+   */
+  getConfigStatus(): {
+    configured: boolean;
+    model: string;
+    maxTokens: number;
+    temperature: number;
+  } {
+    return {
+      configured: this.isConfigured(),
+      model: this.config.model,
+      maxTokens: this.config.maxTokens,
+      temperature: this.config.temperature
+    };
+  }
 }
 
 // Factory function
 export const createClaudeService = (
-  config: ClaudeServiceConfig, 
+  config: ClaudeServiceConfig,
   ragService?: RAGService
 ): ClaudeAnalysisService => {
   return new ClaudeAnalysisService(config, ragService);
@@ -345,7 +388,7 @@ export class AnalysisContext {
   addTranscript(text: string): void {
     const words = text.split(' ');
     this.contextWindow.push(...words);
-    
+
     // Keep only recent context
     if (this.contextWindow.length > this.maxContextLength) {
       this.contextWindow = this.contextWindow.slice(-this.maxContextLength);
@@ -374,7 +417,7 @@ export class AnalysisContext {
     return {
       contextWindow: this.contextWindow,
       entities: this.entities,
-      topicHistory: this.topicHistory
+      topicHistory: this.topicHistory,
     };
   }
 
@@ -384,7 +427,7 @@ export class AnalysisContext {
       /\b[A-Z][a-z]*[A-Z][a-zA-Z]*\b/g, // CamelCase terms
       /\b\w+\.(js|ts|py|java|go|rs)\b/g, // File extensions
       /\b(API|SDK|UI|UX|DB|SQL|REST|GraphQL|JWT|OAuth)\b/g, // Common tech acronyms
-      /\b[a-z]+\-[a-z]+\b/g // kebab-case terms
+      /\b[a-z]+\-[a-z]+\b/g, // kebab-case terms
     ];
 
     const terms: string[] = [];

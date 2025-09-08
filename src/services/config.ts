@@ -1,6 +1,8 @@
 // Configuration Service - Centralized API keys and settings management
 // Handles environment variables and fallback values
 
+import { IConfigService, AppConfig } from '../types/IConfigService';
+
 export interface ApiConfig {
   deepgram: {
     apiKey: string;
@@ -57,25 +59,21 @@ export interface UIConfig {
   defaultClickThrough: boolean;
 }
 
-export interface AppConfig {
-  api: ApiConfig;
-  audio: AudioConfig;
-  ui: UIConfig;
-  isDevelopment: boolean;
-}
+// Re-export AppConfig from interface for backward compatibility
+export type { AppConfig } from '../types/IConfigService';
 
-class ConfigService {
+class ConfigService implements IConfigService {
   private config: AppConfig;
 
   constructor() {
     this.config = this.loadConfig();
-    this.validateConfig();
-    
+    this.validateConfigInternal();
+
     if (this.config.isDevelopment) {
       console.log('🔧 Configuration loaded:', {
         deepgram_key: this.config.api.deepgram.apiKey ? '✅ Set' : '❌ Missing',
         claude_key: this.config.api.claude.apiKey ? '✅ Set' : '❌ Missing',
-        environment: this.config.isDevelopment ? 'Development' : 'Production'
+        environment: this.config.isDevelopment ? 'Development' : 'Production',
       });
     }
   }
@@ -95,14 +93,22 @@ class ConfigService {
           vadEvents: true, // ПРИНУДИТЕЛЬНО: Voice Activity Detection
           noDelay: true, // ПРИНУДИТЕЛЬНО: убрана буферизация
           interimResultsPeriod: 100, // ПРИНУДИТЕЛЬНО: чаще partial results
-          keywords: this.getEnvVar('DEEPGRAM_KEYWORDS', this.getDefaultKeywords()), // IT-термины
+          keywords: this.getEnvVar(
+            'DEEPGRAM_KEYWORDS',
+            this.getDefaultKeywords()
+          ), // IT-термины
         },
         openai: {
           apiKey: this.getEnvVar('OPENAI_API_KEY', ''),
           whisperModel: this.getEnvVar('OPENAI_WHISPER_MODEL', 'whisper-1'),
-          temperature: parseFloat(this.getEnvVar('OPENAI_WHISPER_TEMPERATURE', '0.0')),
-          language: this.getEnvVar('OPENAI_WHISPER_LANGUAGE', '') || null, // null для автодетекции
-          prompt: this.getEnvVar('OPENAI_WHISPER_PROMPT', 'This is a technical interview. Terms may include: API, React, TypeScript, Docker, Kubernetes, DevOps, CI/CD, machine learning, microservices, architecture, development.')
+          temperature: parseFloat(
+            this.getEnvVar('OPENAI_WHISPER_TEMPERATURE', '0.0')
+          ),
+          language: this.getEnvVar('OPENAI_WHISPER_LANGUAGE', '') || '', // пустая строка для автодетекции
+          prompt: this.getEnvVar(
+            'OPENAI_WHISPER_PROMPT',
+            'This is a technical interview. Terms may include: API, React, TypeScript, Docker, Kubernetes, DevOps, CI/CD, machine learning, microservices, architecture, development.'
+          ),
         },
         claude: {
           apiKey: this.getEnvVar('CLAUDE_API_KEY', ''),
@@ -114,29 +120,49 @@ class ConfigService {
           apiKey: this.getEnvVar('POST_EDITOR_API_KEY', ''), // Can use same as Claude
           model: this.getEnvVar('POST_EDITOR_MODEL', 'claude-3-haiku-20240307'), // Fast model
           maxTokens: parseInt(this.getEnvVar('POST_EDITOR_MAX_TOKENS', '150')),
-          temperature: parseFloat(this.getEnvVar('POST_EDITOR_TEMPERATURE', '0.1')), // Low for consistency
-          maxRequestsPerSecond: parseFloat(this.getEnvVar('POST_EDITOR_MAX_RPS', '3')), // Увеличили с 1 до 3
+          temperature: parseFloat(
+            this.getEnvVar('POST_EDITOR_TEMPERATURE', '0.1')
+          ), // Low for consistency
+          maxRequestsPerSecond: parseFloat(
+            this.getEnvVar('POST_EDITOR_MAX_RPS', '3')
+          ), // Увеличили с 1 до 3
           timeoutMs: parseInt(this.getEnvVar('POST_EDITOR_TIMEOUT_MS', '500')), // Увеличили с 250 до 500
           enabled: this.getEnvVar('POST_EDITOR_ENABLED', 'true') === 'true',
-        }
+        },
       },
       audio: {
         sampleRate: parseInt(this.getEnvVar('AUDIO_SAMPLE_RATE', '16000')),
         channels: parseInt(this.getEnvVar('AUDIO_CHANNELS', '1')),
-        echoCancellation: this.getEnvVar('AUDIO_ECHO_CANCELLATION', 'true') === 'true',
-        noiseSuppression: this.getEnvVar('AUDIO_NOISE_SUPPRESSION', 'true') === 'true',
-        autoGainControl: this.getEnvVar('AUDIO_AUTO_GAIN_CONTROL', 'true') === 'true',
+        echoCancellation:
+          this.getEnvVar('AUDIO_ECHO_CANCELLATION', 'true') === 'true',
+        noiseSuppression:
+          this.getEnvVar('AUDIO_NOISE_SUPPRESSION', 'true') === 'true',
+        autoGainControl:
+          this.getEnvVar('AUDIO_AUTO_GAIN_CONTROL', 'true') === 'true',
         chunkSize: parseInt(this.getEnvVar('AUDIO_CHUNK_SIZE', '250')),
       },
       ui: {
-        insightFrequencyMs: parseInt(this.getEnvVar('UI_INSIGHT_FREQUENCY_MS', '3000')),
-        minInsightConfidence: parseFloat(this.getEnvVar('UI_MIN_INSIGHT_CONFIDENCE', '0.6')),
-        transcriptBufferWords: parseInt(this.getEnvVar('UI_TRANSCRIPT_BUFFER_WORDS', '600')),
-        maxInsightsDisplay: parseInt(this.getEnvVar('UI_MAX_INSIGHTS_DISPLAY', '3')),
-        defaultActivePanel: this.getEnvVar('UI_DEFAULT_ACTIVE_PANEL', 'transcript') as 'transcript' | 'insights' | 'settings',
-        defaultClickThrough: this.getEnvVar('UI_DEFAULT_CLICK_THROUGH', 'false') === 'true',
+        insightFrequencyMs: parseInt(
+          this.getEnvVar('UI_INSIGHT_FREQUENCY_MS', '3000')
+        ),
+        minInsightConfidence: parseFloat(
+          this.getEnvVar('UI_MIN_INSIGHT_CONFIDENCE', '0.6')
+        ),
+        transcriptBufferWords: parseInt(
+          this.getEnvVar('UI_TRANSCRIPT_BUFFER_WORDS', '600')
+        ),
+        maxInsightsDisplay: parseInt(
+          this.getEnvVar('UI_MAX_INSIGHTS_DISPLAY', '3')
+        ),
+        defaultActivePanel: this.getEnvVar(
+          'UI_DEFAULT_ACTIVE_PANEL',
+          'transcript'
+        ) as 'transcript' | 'insights' | 'settings',
+        defaultClickThrough:
+          this.getEnvVar('UI_DEFAULT_CLICK_THROUGH', 'false') === 'true',
       },
-      isDevelopment: this.getEnvVar('NODE_ENV', 'development') === 'development'
+      isDevelopment:
+        this.getEnvVar('NODE_ENV', 'development') === 'development',
     };
   }
 
@@ -145,38 +171,76 @@ class ConfigService {
     if (typeof process !== 'undefined' && process.env) {
       return process.env[key] || defaultValue;
     }
-    
+
     // Fallback для browser environment
     if (typeof window !== 'undefined' && (window as any).process?.env) {
       return (window as any).process.env[key] || defaultValue;
     }
-    
+
     // В безопасном режиме Electron переменные окружения недоступны напрямую
     // Они будут переданы через electronAPI.getConfig() асинхронно
-    console.warn(`⚠️ [CONFIG] Environment variable ${key} not available in secure mode, using default: ${defaultValue}`);
+    console.warn(
+      `⚠️ [CONFIG] Environment variable ${key} not available in secure mode, using default: ${defaultValue}`
+    );
     return defaultValue;
   }
 
   private getDefaultKeywords(): string {
     // IT-термины с весами для лучшего распознавания
     const keywords = [
-      'React:10', 'JavaScript:10', 'TypeScript:10', 'Node.js:10',
-      'Python:10', 'Docker:10', 'Kubernetes:10', 'API:10',
-      'frontend:8', 'backend:8', 'database:8', 'server:8',
-      'component:6', 'function:6', 'method:6', 'class:6',
-      'interface:6', 'service:6', 'controller:6', 'repository:6',
-      'Angular:10', 'Vue:10', 'Svelte:8', 'Next.js:8',
-      'Express:8', 'FastAPI:8', 'Django:8', 'Spring:8',
-      'PostgreSQL:8', 'MongoDB:8', 'Redis:8', 'MySQL:8',
-      'AWS:10', 'Azure:8', 'Google Cloud:8', 'Firebase:8',
-      'Git:8', 'GitHub:8', 'GitLab:6', 'Bitbucket:6',
-      'JWT:8', 'OAuth:8', 'REST:8', 'GraphQL:8',
-      'microservices:6', 'serverless:6', 'DevOps:6', 'CI/CD:6'
+      'React:10',
+      'JavaScript:10',
+      'TypeScript:10',
+      'Node.js:10',
+      'Python:10',
+      'Docker:10',
+      'Kubernetes:10',
+      'API:10',
+      'frontend:8',
+      'backend:8',
+      'database:8',
+      'server:8',
+      'component:6',
+      'function:6',
+      'method:6',
+      'class:6',
+      'interface:6',
+      'service:6',
+      'controller:6',
+      'repository:6',
+      'Angular:10',
+      'Vue:10',
+      'Svelte:8',
+      'Next.js:8',
+      'Express:8',
+      'FastAPI:8',
+      'Django:8',
+      'Spring:8',
+      'PostgreSQL:8',
+      'MongoDB:8',
+      'Redis:8',
+      'MySQL:8',
+      'AWS:10',
+      'Azure:8',
+      'Google Cloud:8',
+      'Firebase:8',
+      'Git:8',
+      'GitHub:8',
+      'GitLab:6',
+      'Bitbucket:6',
+      'JWT:8',
+      'OAuth:8',
+      'REST:8',
+      'GraphQL:8',
+      'microservices:6',
+      'serverless:6',
+      'DevOps:6',
+      'CI/CD:6',
     ];
     return keywords.join(',');
   }
 
-  private validateConfig(): void {
+  private validateConfigInternal(): void {
     const errors: string[] = [];
 
     // Validate API keys if not in mock mode
@@ -189,7 +253,10 @@ class ConfigService {
     }
 
     // Validate audio settings
-    if (this.config.audio.sampleRate < 8000 || this.config.audio.sampleRate > 48000) {
+    if (
+      this.config.audio.sampleRate < 8000 ||
+      this.config.audio.sampleRate > 48000
+    ) {
       errors.push('AUDIO_SAMPLE_RATE must be between 8000 and 48000');
     }
 
@@ -202,7 +269,10 @@ class ConfigService {
       errors.push('UI_INSIGHT_FREQUENCY_MS must be at least 1000ms');
     }
 
-    if (this.config.ui.minInsightConfidence < 0 || this.config.ui.minInsightConfidence > 1) {
+    if (
+      this.config.ui.minInsightConfidence < 0 ||
+      this.config.ui.minInsightConfidence > 1
+    ) {
       errors.push('UI_MIN_INSIGHT_CONFIDENCE must be between 0 and 1');
     }
 
@@ -246,19 +316,29 @@ class ConfigService {
         const configData = await (window as any).electronAPI.getConfig();
         if (configData?.env) {
           // Обновляем конфигурацию с реальными переменными окружения
-          this.config.api.deepgram.apiKey = configData.env.DEEPGRAM_API_KEY || this.config.api.deepgram.apiKey;
-          this.config.api.claude.apiKey = configData.env.CLAUDE_API_KEY || this.config.api.claude.apiKey;
-          this.config.api.openai.apiKey = configData.env.OPENAI_API_KEY || this.config.api.openai.apiKey;
-          this.config.api.postEditor.apiKey = configData.env.POST_EDITOR_API_KEY || this.config.api.postEditor.apiKey;
+          this.config.api.deepgram.apiKey =
+            configData.env.DEEPGRAM_API_KEY || this.config.api.deepgram.apiKey;
+          this.config.api.claude.apiKey =
+            configData.env.CLAUDE_API_KEY || this.config.api.claude.apiKey;
+          this.config.api.openai.apiKey =
+            configData.env.OPENAI_API_KEY || this.config.api.openai.apiKey;
+          this.config.api.postEditor.apiKey =
+            configData.env.POST_EDITOR_API_KEY ||
+            this.config.api.postEditor.apiKey;
           this.config.isDevelopment = configData.env.NODE_ENV === 'development';
-          
-          console.log('✅ [CONFIG] Environment variables loaded from electronAPI');
+
+          console.log(
+            '✅ [CONFIG] Environment variables loaded from electronAPI'
+          );
         }
       } catch (error) {
-        console.warn('⚠️ [CONFIG] Failed to load environment variables from electronAPI:', error);
+        console.warn(
+          '⚠️ [CONFIG] Failed to load environment variables from electronAPI:',
+          error
+        );
       }
     }
-    
+
     return this.config;
   }
 
@@ -276,7 +356,24 @@ class ConfigService {
   }
 
   isPostEditorConfigured(): boolean {
-    return Boolean(this.config.api.postEditor.apiKey && this.config.api.postEditor.enabled);
+    return Boolean(
+      this.config.api.postEditor.apiKey && this.config.api.postEditor.enabled
+    );
+  }
+
+  isServiceConfigured(service: string): boolean {
+    switch (service) {
+      case 'deepgram':
+        return this.isDeepgramConfigured();
+      case 'claude':
+        return this.isClaudeConfigured();
+      case 'openai':
+        return this.isOpenAIConfigured();
+      case 'postEditor':
+        return this.isPostEditorConfigured();
+      default:
+        return false;
+    }
   }
 
   // Get service-specific configs
@@ -302,7 +399,7 @@ class ConfigService {
       whisperModel: this.config.api.openai.whisperModel,
       temperature: this.config.api.openai.temperature,
       language: this.config.api.openai.language,
-      prompt: this.config.api.openai.prompt
+      prompt: this.config.api.openai.prompt,
     };
   }
 
@@ -317,7 +414,8 @@ class ConfigService {
 
   getPostEditorConfig() {
     return {
-      apiKey: this.config.api.postEditor.apiKey || this.config.api.claude.apiKey, // Fallback to Claude key
+      apiKey:
+        this.config.api.postEditor.apiKey || this.config.api.claude.apiKey, // Fallback to Claude key
       model: this.config.api.postEditor.model,
       maxTokens: this.config.api.postEditor.maxTokens,
       temperature: this.config.api.postEditor.temperature,
@@ -334,7 +432,7 @@ class ConfigService {
         echoCancellation: this.config.audio.echoCancellation,
         noiseSuppression: this.config.audio.noiseSuppression,
         autoGainControl: this.config.audio.autoGainControl,
-      }
+      },
     };
   }
 
@@ -342,14 +440,54 @@ class ConfigService {
   logConfig(): void {
     if (this.config.isDevelopment) {
       console.table({
-        'Deepgram API': this.isDeepgramConfigured() ? '✅ Configured' : '❌ Missing',
-        'Claude API': this.isClaudeConfigured() ? '✅ Configured' : '❌ Missing',
+        'Deepgram API': this.isDeepgramConfigured()
+          ? '✅ Configured'
+          : '❌ Missing',
+        'Claude API': this.isClaudeConfigured()
+          ? '✅ Configured'
+          : '❌ Missing',
         'Sample Rate': `${this.config.audio.sampleRate}Hz`,
-        'Channels': this.config.audio.channels,
+        Channels: this.config.audio.channels,
         'Insight Frequency': `${this.config.ui.insightFrequencyMs}ms`,
-        'Environment': this.config.isDevelopment ? 'Development' : 'Production'
+        Environment: this.config.isDevelopment ? 'Development' : 'Production',
       });
     }
+  }
+
+  /**
+   * Validate configuration integrity
+   */
+  validateConfig(): {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+  } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Check required API keys
+    if (!this.config.api.deepgram.apiKey) {
+      errors.push('Deepgram API key is required');
+    }
+    if (!this.config.api.claude.apiKey) {
+      errors.push('Claude API key is required');
+    }
+
+    // Check audio configuration
+    if (this.config.audio.sampleRate < 8000 || this.config.audio.sampleRate > 48000) {
+      warnings.push('Audio sample rate should be between 8kHz and 48kHz');
+    }
+
+    // Check UI configuration
+    if (this.config.ui.insightFrequencyMs < 1000) {
+      warnings.push('Insight frequency should be at least 1 second');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
   }
 }
 
