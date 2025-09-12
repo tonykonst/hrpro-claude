@@ -1,6 +1,7 @@
-import { app } from 'electron';
+import { app, systemPreferences } from 'electron';
 import { config } from 'dotenv';
 import { WindowManager } from './windows/WindowManager';
+import { OverlayWindowManager } from './windows/OverlayWindowManager';
 import { IPCHandlers } from './ipc/IPCHandlers';
 import { AppLifecycle } from './lifecycle/AppLifecycle';
 import { Logger } from '../utils/logger';
@@ -16,13 +17,37 @@ config();
  */
 class MainProcess {
   private windowManager: WindowManager;
+  private overlayWindowManager: OverlayWindowManager;
   private ipcHandlers: IPCHandlers;
   private appLifecycle: AppLifecycle;
 
   constructor() {
     this.windowManager = new WindowManager();
+    this.overlayWindowManager = new OverlayWindowManager();
     this.ipcHandlers = new IPCHandlers(this.windowManager);
     this.appLifecycle = new AppLifecycle(this.windowManager);
+  }
+
+  /**
+   * Request media access permissions on macOS
+   */
+  private async requestMediaPermissions(): Promise<void> {
+    if (process.platform === 'darwin') {
+      try {
+        Logger.info('Requesting microphone permission on macOS');
+        const micAccess = await systemPreferences.askForMediaAccess('microphone');
+        
+        if (micAccess) {
+          Logger.info('Microphone access granted');
+        } else {
+          Logger.warn('Microphone access denied');
+        }
+      } catch (error) {
+        Logger.error('Error requesting media permissions', { 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    }
   }
 
   /**
@@ -30,6 +55,9 @@ class MainProcess {
    */
   async initialize(): Promise<void> {
     Logger.info('Starting Interview Assistant...');
+
+    // Request media permissions on macOS
+    await this.requestMediaPermissions();
 
     // Setup application lifecycle
     this.appLifecycle.setup();
@@ -39,6 +67,9 @@ class MainProcess {
 
     // Create control panel window
     this.createControlPanelWindow();
+
+    // Create native audio overlay (if enabled)
+    this.createNativeAudioOverlay();
 
     Logger.info('Application initialized successfully');
   }
@@ -64,10 +95,40 @@ class MainProcess {
   }
 
   /**
+   * Create native audio overlay window
+   */
+  private createNativeAudioOverlay(): void {
+    try {
+      const overlayWindow = this.overlayWindowManager.createNativeAudioOverlay();
+      
+      // DevTools для отладки в development режиме
+      if (process.env.NODE_ENV === 'development') {
+        overlayWindow.webContents.once('did-finish-load', () => {
+          Logger.debug('Opening DevTools for native audio overlay');
+          overlayWindow.webContents.openDevTools({ mode: 'detach' });
+        });
+      }
+
+      // Обработка загрузки overlay
+      overlayWindow.webContents.on('did-finish-load', () => {
+        Logger.info('Native audio overlay loaded');
+      });
+
+      Logger.info('Native audio overlay created successfully');
+      
+    } catch (error) {
+      Logger.error('Failed to create native audio overlay', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
+
+  /**
    * Cleanup resources
    */
   cleanup(): void {
     Logger.info('Cleaning up resources...');
+    this.overlayWindowManager.destroy();
     this.appLifecycle.cleanup();
   }
 }

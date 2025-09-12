@@ -19,3 +19,6 @@ export * from './data';
 
 // Common Components
 export * from './common';
+
+// Overlay Components
+export * from './overlay';

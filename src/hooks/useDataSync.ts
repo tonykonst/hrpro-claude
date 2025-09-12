@@ -51,10 +51,10 @@ export const useDataSync = (options: DataSyncOptions) => {
             );
             window.electronAPI
               .sendTranscript(data)
-              .then(result => {
+              .then((result: any) => {
                 console.log('📤 [DataSync] sendTranscript result:', result);
               })
-              .catch(error => {
+              .catch((error: any) => {
                 console.error('📤 [DataSync] sendTranscript error:', error);
               });
           } else if (type === 'insights') {

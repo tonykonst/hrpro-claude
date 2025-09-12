@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Configuration Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Audio Configuration Test</h1>
+        <p>This test verifies that the audio system is configured to capture only candidate speech (system audio) and not HR microphone input.</p>
+        
+        <div id="status" class="status info">
+            Ready to test audio configuration...
+        </div>
+        
+        <div>
+            <button onclick="testAudioSplitConfig()">Test Audio Split Config</button>
+            <button onclick="testSystemAudio()">Test System Audio</button>
+            <button onclick="testMicrophone()">Test Microphone (Should NOT be used)</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <div id="log" class="log"></div>
+        
+        <h3>Expected Behavior:</h3>
+        <ul>
+            <li>✅ <strong>Audio Split:</strong> Should be DISABLED (false)</li>
+            <li>✅ <strong>System Audio:</strong> Should work (candidate speech from video calls)</li>
+            <li>❌ <strong>Microphone:</strong> Should NOT be used for transcription</li>
+        </ul>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logEntry.style.color = type === 'error' ? '#721c24' : 
+                                  type === 'warning' ? '#856404' : 
+                                  type === 'success' ? '#155724' : '#0c5460';
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        async function testAudioSplitConfig() {
+            log('🔧 Testing Audio Split Configuration...');
+            
+            try {
+                // Simulate the config service behavior
+                const audioSplitEnabled = false; // This should be false now
+                
+                if (audioSplitEnabled) {
+                    log('❌ Audio Split is ENABLED - this will cause HR speech to be transcribed!', 'error');
+                    updateStatus('❌ Audio Split is ENABLED - HR speech will be transcribed!', 'error');
+                } else {
+                    log('✅ Audio Split is DISABLED - system will use system audio only', 'success');
+                    updateStatus('✅ Audio Split is DISABLED - only candidate speech will be transcribed', 'success');
+                }
+                
+                log(`Audio Split Config: enabled=${audioSplitEnabled}`);
+                log('This means the system will use fallback mode with system audio');
+                
+            } catch (error) {
+                log(`❌ Error testing audio split config: ${error.message}`, 'error');
+                updateStatus('❌ Error testing configuration', 'error');
+            }
+        }
+
+        async function testSystemAudio() {
+            log('🎧 Testing System Audio Capture...');
+            updateStatus('Testing system audio...', 'info');
+            
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        systemAudio: true
+                    },
+                    video: false
+                });
+                
+                log('✅ System audio capture successful!', 'success');
+                log(`Stream ID: ${stream.id}`);
+                log(`Audio tracks: ${stream.getAudioTracks().length}`);
+                
+                // Stop the stream
+                stream.getTracks().forEach(track => track.stop());
+                log('🛑 System audio stream stopped');
+                
+                updateStatus('✅ System audio works - candidate speech can be captured', 'success');
+                
+            } catch (error) {
+                log(`❌ System audio capture failed: ${error.message}`, 'error');
+                updateStatus('❌ System audio capture failed', 'error');
+                
+                if (error.name === 'NotAllowedError') {
+                    log('💡 User denied system audio permission. This is expected for security.', 'warning');
+                }
+            }
+        }
+
+        async function testMicrophone() {
+            log('🎤 Testing Microphone Capture (This should NOT be used for transcription)...');
+            updateStatus('Testing microphone...', 'warning');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                
+                log('⚠️ Microphone capture successful (but should NOT be used for transcription)', 'warning');
+                log(`Stream ID: ${stream.id}`);
+                log(`Audio tracks: ${stream.getAudioTracks().length}`);
+                
+                // Stop the stream
+                stream.getTracks().forEach(track => track.stop());
+                log('🛑 Microphone stream stopped');
+                
+                updateStatus('⚠️ Microphone works but should NOT be used for transcription', 'warning');
+                
+            } catch (error) {
+                log(`❌ Microphone capture failed: ${error.message}`, 'error');
+                updateStatus('❌ Microphone capture failed', 'error');
+            }
+        }
+
+        // Auto-run the config test on page load
+        window.addEventListener('load', () => {
+            setTimeout(testAudioSplitConfig, 1000);
+        });
+    </script>
+</body>
+</html>

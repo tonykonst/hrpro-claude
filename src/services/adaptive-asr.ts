@@ -18,19 +18,24 @@ export interface PerformanceMetrics {
 
 export class LanguageDetector {
   private languageHistory: LanguageStats[] = [];
-  private currentLanguage: 'ru' | 'en' | 'multi' = 'multi';
 
   detectLanguage(text: string): LanguageStats {
+    // Улучшенные паттерны для более точной детекции
     const englishPattern = /[a-zA-Z]/g;
     const russianPattern = /[а-яё]/gi;
     const numberPattern = /\d/g;
+    const punctuationPattern = /[.,!?;:()\-"']/g;
+    const spacePattern = /\s/g;
 
     const englishChars = (text.match(englishPattern) || []).length;
     const russianChars = (text.match(russianPattern) || []).length;
     const numberChars = (text.match(numberPattern) || []).length;
+    const punctuationChars = (text.match(punctuationPattern) || []).length;
+    const spaceChars = (text.match(spacePattern) || []).length;
 
+    // Исключаем цифры, знаки препинания и пробелы из подсчета
     const totalLetters = englishChars + russianChars;
-    const totalChars = text.length - numberChars; // Исключаем цифры
+    const totalChars = text.length - numberChars - punctuationChars - spaceChars;
 
     if (totalLetters === 0) {
       return {
@@ -47,15 +52,25 @@ export class LanguageDetector {
     let detectedLanguage: 'ru' | 'en' | 'mixed';
     let confidence: number;
 
-    if (englishRatio > 0.8) {
+    // Более строгие пороги для лучшей детекции
+    if (englishRatio > 0.85) {
+      detectedLanguage = 'en';
+      confidence = Math.min(englishRatio * 1.1, 1.0); // Небольшой буст для английского
+    } else if (russianRatio > 0.85) {
+      detectedLanguage = 'ru';
+      confidence = Math.min(russianRatio * 1.1, 1.0); // Небольшой буст для русского
+    } else if (englishRatio > 0.3 && russianRatio > 0.3) {
+      // Смешанный язык - оба языка присутствуют в значительном количестве
+      detectedLanguage = 'mixed';
+      confidence = 1 - Math.abs(englishRatio - russianRatio);
+    } else if (englishRatio > russianRatio) {
+      // Преобладает английский, но не критично
       detectedLanguage = 'en';
       confidence = englishRatio;
-    } else if (russianRatio > 0.8) {
+    } else {
+      // Преобладает русский, но не критично
       detectedLanguage = 'ru';
       confidence = russianRatio;
-    } else {
-      detectedLanguage = 'mixed';
-      confidence = 1 - Math.abs(englishRatio - russianRatio); // Чем ближе к 50/50, тем выше уверенность в смешанном
     }
 
     const stats: LanguageStats = {
@@ -99,36 +114,20 @@ export class LanguageDetector {
     return dominant;
   }
 
-  // Нужно ли переключить модель Deepgram
-  shouldSwitchModel(currentLanguageSetting: string): {
-    switch: boolean;
-    newSetting: string;
+  // Получить статистику по языку (для логирования)
+  getLanguageStats(): {
+    dominant: 'ru' | 'en' | 'mixed';
+    recentConfidence: number;
+    historyLength: number;
   } {
     const dominant = this.getDominantLanguage();
-
-    // Переключаемся только если есть явное доминирование (не mixed)
-    if (dominant === 'mixed') {
-      // Если доминирует mixed язык - переключаемся обратно на multi
-      if (currentLanguageSetting !== 'multi') {
-        return { switch: true, newSetting: 'multi' };
-      }
-      return { switch: false, newSetting: currentLanguageSetting };
-    }
-
-    // Если доминирует один язык, а у нас multi - можно оптимизировать
-    if (
-      currentLanguageSetting === 'multi' &&
-      (dominant === 'ru' || dominant === 'en')
-    ) {
-      const recentConfidence = this.getRecentConfidence(dominant);
-
-      // Переключаемся на конкретный язык только при высокой уверенности
-      if (recentConfidence > 0.85) {
-        return { switch: true, newSetting: dominant };
-      }
-    }
-
-    return { switch: false, newSetting: currentLanguageSetting };
+    const recentConfidence = dominant === 'mixed' ? 0 : this.getRecentConfidence(dominant as 'ru' | 'en');
+    
+    return {
+      dominant,
+      recentConfidence,
+      historyLength: this.languageHistory.length
+    };
   }
 
   private getRecentConfidence(language: 'ru' | 'en'): number {
@@ -146,7 +145,6 @@ export class LanguageDetector {
 
   getDebugInfo() {
     return {
-      currentLanguage: this.currentLanguage,
       dominantLanguage: this.getDominantLanguage(),
       historyLength: this.languageHistory.length,
       recentStats: this.languageHistory.slice(-3),
@@ -224,10 +222,10 @@ export class PerformanceOptimizer {
       };
     }
 
-    // По умолчанию - balanced модель для интервью
+    // По умолчанию - general модель с поддержкой автоопределения языка
     return {
-      model: 'nova-2-meeting',
-      reason: 'balanced for interview context',
+      model: 'nova-2-general',
+      reason: 'supports automatic language detection',
     };
   }
 
@@ -282,7 +280,6 @@ export class PerformanceOptimizer {
 export class AdaptiveASRManager {
   private languageDetector: LanguageDetector;
   private performanceOptimizer: PerformanceOptimizer;
-  private currentLanguageSetting: string = 'multi';
 
   constructor() {
     this.languageDetector = new LanguageDetector();
@@ -293,7 +290,9 @@ export class AdaptiveASRManager {
   analyzeTranscript(
     text: string,
     confidence: number,
-    latency: number = 200
+    latency: number = 200,
+    detectedLanguage?: string,
+    languageConfidence?: number
   ): {
     languageStats: LanguageStats;
     shouldOptimize: boolean;
@@ -303,41 +302,60 @@ export class AdaptiveASRManager {
       adaptiveParams?: any;
     };
   } {
-    const languageStats = this.languageDetector.detectLanguage(text);
+    // Используем официальные данные о языке от Deepgram, если доступны
+    let languageStats: LanguageStats;
+    
+    if (detectedLanguage && languageConfidence !== undefined) {
+      // Используем официальные данные Deepgram
+      languageStats = {
+        language: this.mapDeepgramLanguage(detectedLanguage),
+        confidence: languageConfidence,
+        characterCount: text.length,
+        lastDetected: Date.now(),
+      };
+    } else {
+      // Fallback на наш детектор языка
+      languageStats = this.languageDetector.detectLanguage(text);
+    }
+
     this.performanceOptimizer.updateMetrics(confidence, latency);
 
-    const languageSwitch = this.languageDetector.shouldSwitchModel(
-      this.currentLanguageSetting
-    );
     const modelRecommendation =
       this.performanceOptimizer.getModelRecommendation();
     const adaptiveParams = this.performanceOptimizer.getAdaptiveParameters();
 
-    // Определяем, нужна ли оптимизация
+    // Определяем, нужна ли оптимизация (убрали переключение языка - Deepgram сам управляет)
     const shouldOptimize =
-      languageSwitch.switch ||
-      modelRecommendation.model !== 'nova-2-meeting' ||
+      modelRecommendation.model !== 'nova-2-general' ||
       adaptiveParams.confidence_threshold !== 0.9;
 
     return {
       languageStats,
       shouldOptimize,
       recommendations: {
-        languageSwitch: languageSwitch.switch ? languageSwitch : undefined,
         modelSwitch: modelRecommendation,
         adaptiveParams,
       },
     };
   }
 
-  // Обновляем текущие настройки
-  updateCurrentSettings(languageSetting: string) {
-    this.currentLanguageSetting = languageSetting;
+  // Маппинг языков Deepgram в наш формат
+  private mapDeepgramLanguage(deepgramLang: string): 'ru' | 'en' | 'mixed' {
+    switch (deepgramLang.toLowerCase()) {
+      case 'ru':
+      case 'russian':
+        return 'ru';
+      case 'en':
+      case 'english':
+        return 'en';
+      default:
+        return 'mixed';
+    }
   }
+
 
   getDebugInfo() {
     return {
-      currentLanguage: this.currentLanguageSetting,
       languageDetector: this.languageDetector.getDebugInfo(),
       performance: this.performanceOptimizer.getDebugInfo(),
     };

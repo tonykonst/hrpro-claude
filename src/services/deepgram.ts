@@ -86,10 +86,9 @@ export class DeepgramService {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        // Deepgram WebSocket URL с оптимизациями для скорости
+        // Deepgram WebSocket URL с официальным автоопределением языка
         const params = new URLSearchParams({
           model: this.config.model,
-          // language: не передаем если пустой (автоопределение)
           punctuation: this.config.punctuation.toString(),
           interim_results: this.config.interim_results.toString(),
           smart_format: this.config.smart_format.toString(),
@@ -98,9 +97,13 @@ export class DeepgramService {
           channels: '1',
         });
 
-        // Добавляем language только если он не пустой
+        // Официальное автоопределение языка Deepgram
         if (this.config.language && this.config.language.trim() !== '') {
+          // Если указан конкретный язык - используем его
           params.append('language', this.config.language);
+        } else {
+          // Если язык не указан - включаем автоопределение
+          params.append('detect_language', 'true');
         }
 
         // Добавляем keywords только если они не пустые
@@ -197,11 +200,25 @@ export class DeepgramService {
               const is_final = data.is_final || false;
               const latency = Date.now() - this.sessionStartTime;
 
-              // Адаптивный анализ транскрипта
+              // Получаем официальные данные о языке от Deepgram
+              const detectedLanguage = data.channel?.detected_language;
+              const languageConfidence = data.channel?.language_confidence;
+
+              Logger.debug('Deepgram language detection', {
+                detectedLanguage,
+                languageConfidence,
+                transcript: transcript.substring(0, 50) + (transcript.length > 50 ? '...' : ''),
+                confidence,
+                is_final
+              });
+
+              // Адаптивный анализ транскрипта (теперь с официальными данными о языке)
               const analysis = this.adaptiveASR.analyzeTranscript(
                 transcript,
                 confidence,
-                latency
+                latency,
+                detectedLanguage,
+                languageConfidence
               );
 
               Logger.debug('Adaptive ASR analysis', {
@@ -215,20 +232,14 @@ export class DeepgramService {
                 recommendations: analysis.recommendations,
               });
 
-              // Применяем рекомендации по оптимизации
-              if (analysis.shouldOptimize && is_final) {
-                this.applyOptimizations(analysis.recommendations);
-              }
-
-              // Динамическое переключение на английский для быстрой речи
-              if (
-                analysis.languageStats.language === 'en' &&
-                confidence > 0.8 &&
-                this.config.language !== 'en'
-              ) {
-                Logger.info(
-                  'Detected stable English, consider switching to en-only mode for better performance'
-                );
+              // Логируем информацию о языке от Deepgram
+              if (detectedLanguage) {
+                Logger.info('Deepgram detected language', {
+                  detectedLanguage,
+                  languageConfidence,
+                  transcript: transcript.substring(0, 30) + '...',
+                  is_final
+                });
               }
 
               const segmentId = `segment_${++this.segmentCounter}_${Date.now()}`;
@@ -377,27 +388,11 @@ export class DeepgramService {
     }
   }
 
-  // Применение адаптивных оптимизаций
+  // Применение адаптивных оптимизаций (упрощено - Deepgram сам управляет языком)
   private applyOptimizations(recommendations: any): void {
     try {
-      if (recommendations.languageSwitch?.switch) {
-        console.log(
-          '🔄 Language optimization:',
-          recommendations.languageSwitch
-        );
-        // В будущем можно реализовать динамическое переключение языка
-        this.adaptiveASR.updateCurrentSettings(
-          recommendations.languageSwitch.newSetting
-        );
-      }
-
-      if (recommendations.modelSwitch) {
-        console.log('⚡ Model recommendation:', recommendations.modelSwitch);
-        // Логируем рекомендацию смены модели (для ручной оптимизации)
-      }
-
       if (recommendations.adaptiveParams) {
-        console.log('🎯 Adaptive parameters:', recommendations.adaptiveParams);
+        Logger.debug('🎯 Adaptive parameters:', recommendations.adaptiveParams);
         // Используем адаптивные параметры для постредактора
         if (
           this.postEditor &&
@@ -408,7 +403,7 @@ export class DeepgramService {
         }
       }
     } catch (error) {
-      console.warn('⚠️ Failed to apply optimizations:', error);
+      Logger.warn('⚠️ Failed to apply optimizations:', error);
     }
   }
 
@@ -527,6 +522,7 @@ export class DeepgramService {
       console.warn('⚠️ Failed to end transcript session:', error);
     }
   }
+
 }
 
 // Factory with configurable parameters

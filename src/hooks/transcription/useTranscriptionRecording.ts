@@ -1,6 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { configService } from '../../services/config';
 import { useAudioAnalyser } from '../useAudioAnalyser';
+import { AudioStreamSplitter } from '../../services/audio/AudioStreamSplitter';
+import { AppError, ErrorHandler } from '../../utils/errors';
+import { Logger } from '../../utils/logger';
+import { PerformanceMonitor } from '../../utils/performance-monitor';
 
 /**
  * Recording functionality for transcription hook
@@ -43,25 +47,206 @@ export const useTranscriptionRecording = ({
   stopAudioAnalyser,
   connectToDeepgram
 }: UseTranscriptionRecordingProps) => {
+  const [streamSplitter, setStreamSplitter] = useState<AudioStreamSplitter | null>(null);
+  const [candidateStream, setCandidateStream] = useState<MediaStream | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
 
   /**
-   * Start recording
+   * Start recording with stream splitting
    */
   const startRecording = useCallback(async (): Promise<void> => {
-    console.log('🎬 [useTranscription] Starting recording...');
+    const startTime = performance.now();
+    setIsInitializing(true);
     
     try {
+      Logger.info('Starting recording with stream splitting');
+      
       // Обновляем UI состояние
       setIsRecording(true);
       
-      // Получаем доступ к микрофону
-      const audioConstraints = configService.getAudioConstraints();
-      console.log('🎤 [useTranscription] Requesting microphone access...');
+      // Проверяем, включено ли разделение потоков
+      const audioSplitConfig = configService.getAudioSplitConfig();
       
-      const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+      if (audioSplitConfig.enabled) {
+        try {
+          // ШАГ 1: Инициализируем разделитель потоков с retry логикой
+          const splitter = await ErrorHandler.withRetry(
+            async () => {
+              const newSplitter = new AudioStreamSplitter();
+              await newSplitter.initialize();
+              return newSplitter;
+            },
+            3,
+            1000
+          );
+          setStreamSplitter(splitter);
+          
+          // ШАГ 2: Получаем поток кандидата
+          const candidateAudioStream = await splitter.selectCandidateStream();
+          if (!candidateAudioStream) {
+            throw new AppError(
+              'No candidate audio stream available',
+              'NO_CANDIDATE_STREAM_ERROR',
+              true
+            );
+          }
+          setCandidateStream(candidateAudioStream);
+          streamRef.current = candidateAudioStream;
+          
+          // ШАГ 3: Подключаемся к Deepgram с потоком кандидата
+          const cleanup = await connectToDeepgram();
+          cleanupRef.current = cleanup;
+          
+          // ШАГ 4: Настраиваем аудио pipeline для потока кандидата
+          const audioContext = new AudioContext({ sampleRate: 16000 });
+          audioContextRef.current = audioContext;
+          
+          await audioContext.audioWorklet.addModule('/audioWorklet.js');
+          
+          const source = audioContext.createMediaStreamSource(candidateAudioStream);
+          const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+          
+          // ШАГ 5: Обработчик аудио данных (только кандидат)
+          workletNode.port.onmessage = (event) => {
+            if (event.data.type === 'pcm-data') {
+              deepgramRef.current?.sendAudio(event.data.data);
+            }
+          };
+          
+          source.connect(workletNode);
+          processorRef.current = workletNode;
+          
+          // ШАГ 6: Инициализируем анализатор аудио для потока кандидата
+          initAudioAnalyser(candidateAudioStream);
+          
+          // ШАГ 7: Мониторим активность потоков
+          const monitoringCleanup = startStreamMonitoring(splitter);
+          cleanupRef.current = () => {
+            cleanup();
+            monitoringCleanup();
+          };
+          
+          // Записываем метрики производительности
+          const duration = performance.now() - startTime;
+          PerformanceMonitor.recordAnalysisLatency(duration);
+          
+          Logger.info('Recording started successfully with stream splitting', {
+            candidateStreamId: candidateAudioStream.id,
+            duration: `${duration.toFixed(2)}ms`
+          });
+          
+        } catch (error) {
+          Logger.warn('Stream splitting failed, falling back to single stream', { error });
+          
+          // Fallback к обычному режиму
+          if (audioSplitConfig.fallbackToSingleStream) {
+            await startRecordingFallback();
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        // Обычный режим без разделения потоков
+        await startRecordingFallback();
+      }
+      
+    } catch (error) {
+      Logger.error('Failed to start recording', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      setIsRecording(false);
+      
+      // Создаем более информативную ошибку
+      const appError = new AppError(
+        'Failed to start recording with system audio',
+        'RECORDING_START_ERROR',
+        true,
+        { 
+          originalError: error instanceof Error ? error.message : String(error)
+        }
+      );
+      
+      throw appError;
+    } finally {
+      setIsInitializing(false);
+    }
+  }, [
+    setIsRecording,
+    streamRef,
+    audioContextRef,
+    processorRef,
+    cleanupRef,
+    deepgramRef,
+    initAudioAnalyser,
+    connectToDeepgram
+  ]);
+
+  /**
+   * Fallback recording without stream splitting
+   * Uses system audio (candidate speech) instead of microphone (HR speech)
+   */
+  const startRecordingFallback = useCallback(async (): Promise<void> => {
+    Logger.info('Starting single-stream recording with system audio (video call)');
+    
+    try {
+      // Проверяем поддержку getDisplayMedia
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        throw new Error('getDisplayMedia is not supported in this browser');
+      }
+      
+      Logger.info('Browser info', {
+        userAgent: navigator.userAgent,
+        hasGetDisplayMedia: !!navigator.mediaDevices.getDisplayMedia,
+        mediaDevices: Object.keys(navigator.mediaDevices)
+      });
+      
+      // Пробуем разные варианты захвата
+      let stream: MediaStream;
+      
+      try {
+        // Сначала пробуем с аудио
+        Logger.info('Attempting getDisplayMedia with audio: true');
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          audio: true,
+          video: true
+        });
+      } catch (audioError) {
+        Logger.warn('getDisplayMedia with audio failed, trying video only', { 
+          error: audioError instanceof Error ? audioError.message : String(audioError)
+        });
+        
+        // Если не работает с аудио, пробуем только видео
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true
+        });
+        
+        // Проверяем, есть ли аудио треки в видео потоке
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          throw new Error('No audio tracks available in video stream. Audio capture not supported in this browser.');
+        }
+      }
+      
+      // Проверяем наличие аудио треков
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        throw new Error('No audio tracks found in the captured stream');
+      }
+      
+      // Отключаем видео треки, оставляем только аудио
+      stream.getVideoTracks().forEach(track => {
+        track.stop();
+        stream.removeTrack(track);
+      });
+      
+      Logger.info('System audio captured successfully', {
+        audioTracks: audioTracks.length,
+        audioTrackLabel: audioTracks[0]?.label || 'unknown'
+      });
+      
       streamRef.current = stream;
-      
-      console.log('✅ [useTranscription] Microphone access granted');
       
       // Инициализируем анализатор аудио
       initAudioAnalyser(stream);
@@ -73,8 +258,6 @@ export const useTranscriptionRecording = ({
       // Настраиваем аудио pipeline
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
-      
-      console.log('🔊 [useTranscription] Setting up audio pipeline...');
       
       try {
         // Пытаемся использовать AudioWorklet (современный подход)
@@ -93,10 +276,10 @@ export const useTranscriptionRecording = ({
         source.connect(workletNode);
         processorRef.current = workletNode;
         
-        console.log('✅ [useTranscription] AudioWorklet pipeline ready');
+        Logger.info('Fallback AudioWorklet pipeline ready');
         
       } catch (workletError) {
-        console.warn('⚠️ [useTranscription] AudioWorklet failed, falling back to ScriptProcessor:', workletError);
+        Logger.warn('AudioWorklet failed, falling back to ScriptProcessor', { workletError });
         
         // Fallback на ScriptProcessor
         const source = audioContext.createMediaStreamSource(stream);
@@ -121,18 +304,33 @@ export const useTranscriptionRecording = ({
         processor.connect(audioContext.destination);
         processorRef.current = processor;
         
-        console.log('✅ [useTranscription] ScriptProcessor pipeline ready');
+        Logger.info('Fallback ScriptProcessor pipeline ready');
       }
       
-      console.log('🎉 [useTranscription] Recording started successfully!');
+      Logger.info('Fallback recording started successfully with system audio (video call audio only)');
       
     } catch (error) {
-      console.error('❌ [useTranscription] Failed to start recording:', error);
-      setIsRecording(false);
-      throw error;
+      Logger.error('System audio capture failed', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      const appError = new AppError(
+        'Failed to capture system audio from video call. This browser may not support audio capture from screen sharing.',
+        'SYSTEM_AUDIO_CAPTURE_ERROR',
+        false,
+        { 
+          originalError: error instanceof Error ? error.message : String(error),
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+          userAgent: navigator.userAgent,
+          supportedBrowsers: 'Chrome 72+, Firefox 66+, Safari 13+',
+          instructions: 'Try using Chrome or Firefox. Make sure to select the correct window/tab with the video call.'
+        }
+      );
+      
+      throw appError;
     }
   }, [
-    setIsRecording,
     streamRef,
     audioContextRef,
     processorRef,
@@ -143,10 +341,45 @@ export const useTranscriptionRecording = ({
   ]);
 
   /**
+   * Start stream monitoring
+   */
+  const startStreamMonitoring = useCallback((splitter: AudioStreamSplitter) => {
+    const monitor = setInterval(() => {
+      try {
+        const candidateAnalysis = splitter.getCandidateAnalysis();
+        const hrAnalysis = splitter.getHRAnalysis();
+        
+        // Логируем активность для отладки
+        if (candidateAnalysis?.isActive) {
+          Logger.debug('Candidate stream active', {
+            volume: candidateAnalysis.characteristics.volume.toFixed(2),
+            confidence: candidateAnalysis.confidence.toFixed(2)
+          });
+        }
+        if (hrAnalysis?.isActive) {
+          Logger.debug('HR stream active', {
+            volume: hrAnalysis.characteristics.volume.toFixed(2),
+            confidence: hrAnalysis.confidence.toFixed(2)
+          });
+        }
+        
+        // Можно добавить логику переключения потоков при необходимости
+      } catch (error) {
+        Logger.warn('Stream monitoring error', { error });
+      }
+    }, 1000);
+    
+    return () => {
+      clearInterval(monitor);
+      Logger.debug('Stream monitoring stopped');
+    };
+  }, []);
+
+  /**
    * Stop recording
    */
   const stopRecording = useCallback((): void => {
-    console.log('⏹️ [useTranscription] Stopping recording...');
+    Logger.info('Stopping recording');
     
     try {
       // Останавливаем аудио pipeline
@@ -176,13 +409,20 @@ export const useTranscriptionRecording = ({
         cleanupRef.current = null;
       }
       
+      // Очищаем разделитель потоков
+      if (streamSplitter) {
+        streamSplitter.cleanup();
+        setStreamSplitter(null);
+      }
+      setCandidateStream(null);
+      
       // Обновляем UI состояние
       setIsRecording(false);
       
-      console.log('✅ [useTranscription] Recording stopped successfully!');
+      Logger.info('Recording stopped successfully');
       
     } catch (error) {
-      console.error('❌ [useTranscription] Error stopping recording:', error);
+      Logger.error('Error stopping recording', { error });
       setIsRecording(false);
     }
   }, [
@@ -191,11 +431,15 @@ export const useTranscriptionRecording = ({
     streamRef,
     stopAudioAnalyser,
     cleanupRef,
+    streamSplitter,
     setIsRecording
   ]);
 
   return {
     startRecording,
-    stopRecording
+    stopRecording,
+    streamSplitter,
+    candidateStream,
+    isInitializing
   };
 };

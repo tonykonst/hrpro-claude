@@ -1,67 +1,102 @@
 {
-  "name": "hrpro",
+  "name": "interview-assistant",
   "version": "0.52.0",
-  "description": "AI-powered interview assistant for HR professionals",
+  "description": "AI-powered interview assistant with audio stream splitting",
   "main": "dist/main/main/main.js",
   "scripts": {
-    "dev": "concurrently \"npm run dev:vite\" \"wait-on http://localhost:5173 && npm run dev:electron\"",
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
-    "dev:electron": "tsc -p tsconfig.main.json && electron dist/main/main/main.js",
-    "build": "npm run build:vite && npm run build:electron",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "build": "npm run build:native && npm run build:vite && npm run build:electron",
+    "build:native": "cd src/native/audio && npm run build",
     "build:vite": "vite build",
     "build:electron": "tsc -p tsconfig.main.json",
-    "compile-main": "tsc -p tsconfig.main.json",
-    "clean": "rimraf dist",
-    "type-check": "tsc --noEmit",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix",
-    "format": "prettier --write src/**/*.{ts,tsx}",
-    "format:check": "prettier --check src/**/*.{ts,tsx}",
-    "check": "npm run type-check && npm run lint && npm run format:check",
     "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:audio": "npm test -- --testPathPattern=\"audio\"",
+    "test:audio:unit": "npm test src/services/audio/__tests__/",
+    "test:audio:integration": "npm test src/services/audio/__tests__/AudioStreamSplitter.integration.test.ts",
+    "test:audio:performance": "npm test src/services/audio/__tests__/AudioStreamSplitter.performance.test.ts",
+    "test:audio:all": "node scripts/test-audio-split.js --all",
+    "test:audio:quick": "node scripts/test-audio-split.js --unit --integration",
+    "test:audio:browser": "open test-audio-split.html",
+    "test:native-audio": "node scripts/test-native-audio.js",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:audio": "eslint src/services/audio src/types/IAudioService.ts src/components/control/StreamStatus.tsx src/components/control/HRHeadphoneStatus.tsx",
+    "type-check": "tsc --noEmit",
+    "type-check:audio": "tsc --noEmit --project tsconfig.json --include \"src/services/audio/**/*\" \"src/types/IAudioService.ts\"",
+    "clean": "rimraf dist distmain && cd src/native/audio && npm run clean",
+    "rebuild:native": "cd src/native/audio && npm run rebuild",
+    "postinstall": "electron-builder install-app-deps && npm run rebuild:native"
   },
+  "keywords": [
+    "interview",
+    "ai",
+    "transcription",
+    "audio",
+    "stream-splitting",
+    "electron",
+    "react",
+    "typescript"
+  ],
+  "author": "HR Pro Team",
+  "license": "MIT",
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.8.0",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^20.10.0",
-    "@types/react": "^18.2.45",
-    "@types/react-dom": "^18.2.18",
-    "@typescript-eslint/eslint-plugin": "^8.42.0",
-    "@typescript-eslint/parser": "^8.42.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "@vitest/ui": "^3.2.4",
-    "autoprefixer": "^10.4.16",
-    "concurrently": "^8.2.2",
-    "electron": "^28.0.0",
-    "eslint": "^9.35.0",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "jsdom": "^26.1.0",
-    "postcss": "^8.4.32",
-    "prettier": "^3.6.2",
-    "rimraf": "^5.0.5",
-    "tailwind-scrollbar": "^3.0.5",
-    "tailwindcss": "^3.3.6",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.8",
-    "vitest": "^3.2.4",
-    "wait-on": "^7.2.0"
+    "@electron/rebuild": "^4.0.1",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^8.0.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-rebuild": "^3.2.9",
+    "eslint": "^8.0.0",
+    "eslint-plugin-react": "^7.0.0",
+    "eslint-plugin-react-hooks": "^4.0.0",
+    "node-addon-api": "^8.5.0",
+    "node-gyp": "^11.4.2",
+    "postcss": "^8.5.6",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^4.0.0",
+    "vitest": "^1.0.0",
+    "wait-on": "^7.0.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.60.0",
-    "@deepgram/sdk": "^4.11.2",
-    "dotenv": "^17.2.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "siriwave": "^2.4.0",
-    "stackblur-canvas": "^2.7.0",
-    "zod": "^3.22.4"
+    "@anthropic-ai/sdk": "^0.61.0",
+    "@types/jest": "^30.0.0",
+    "dotenv": "^17.2.2",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "tailwindcss": "^3.4.17"
   },
-  "engines": {
-    "node": ">=18.0.0"
+  "build": {
+    "appId": "com.hrpro.interview-assistant",
+    "productName": "Interview Assistant",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "This application needs access to your microphone to capture and transcribe audio during interviews for HR analysis.",
+        "NSCameraUsageDescription": "This application needs access to your camera to capture video during interviews for HR analysis."
+      }
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

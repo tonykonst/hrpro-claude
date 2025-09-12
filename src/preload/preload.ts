@@ -30,6 +30,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   createDataWindow: () => ipcRenderer.invoke('create-data-window'),
   closeDataWindow: () => ipcRenderer.invoke('close-data-window'),
+  
+  // Overlay methods
+  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+
+  // Native audio methods
+  on: (channel: string, callback: Function) => {
+    const handler = (event: any, ...args: any[]) => callback(...args);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeListener(channel, handler);
+  },
 
   // Слушатели событий - УПРОЩЕННАЯ ВЕРСИЯ
   onTranscriptUpdate: (callback: (data: any) => void) => {

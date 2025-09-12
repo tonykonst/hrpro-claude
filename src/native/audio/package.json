@@ -1,0 +1,38 @@
+{
+  "name": "interview-assistant-native-audio",
+  "version": "1.0.0",
+  "description": "Native audio capture module for Interview Assistant",
+  "main": "index.ts",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "clean": "node-gyp clean",
+    "rebuild": "node-gyp rebuild",
+    "install": "node-gyp rebuild"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.0.0"
+  },
+  "gypfile": true,
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "win32",
+    "darwin"
+  ],
+  "keywords": [
+    "audio",
+    "capture",
+    "native",
+    "wasapi",
+    "core-audio",
+    "electron"
+  ],
+  "author": "Interview Assistant Team",
+  "license": "MIT"
+}
+
+

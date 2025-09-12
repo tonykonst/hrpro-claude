@@ -50,6 +50,18 @@ export interface AppConfig {
     noiseSuppression: boolean;
     autoGainControl: boolean;
     chunkSize: number;
+    maxBufferSize: number;
+    split: {
+      enabled: boolean;
+      autoDetectRoles: boolean;
+      candidateSource: string;
+      hrSource: string;
+      fallbackToSingleStream: boolean;
+      monitoringInterval: number;
+      roleReevaluationTimeout: number;
+      qualityThreshold: number;
+      activityThreshold: number;
+    };
   };
   ui: {
     insightFrequencyMs: number;

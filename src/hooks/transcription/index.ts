@@ -10,5 +10,7 @@ export { useTranscriptionServices } from './useTranscriptionServices';
 export { useTranscriptionCallbacks } from './useTranscriptionCallbacks';
 export { useTranscriptionCore } from './useTranscriptionCore';
 export { useTranscriptionRecording } from './useTranscriptionRecording';
+export { useTranscriptionNative } from './useTranscriptionNative';
+export { useTranscriptionRecordingNative } from './useTranscriptionRecordingNative';
 
 export type { UseTranscriptionReturn } from './useTranscription';

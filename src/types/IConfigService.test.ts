@@ -50,7 +50,19 @@ class MockConfigService implements IConfigService {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        chunkSize: 250
+        chunkSize: 250,
+        maxBufferSize: 1048576,
+        split: {
+          enabled: false,
+          autoDetectRoles: true,
+          candidateSource: '',
+          hrSource: '',
+          fallbackToSingleStream: true,
+          monitoringInterval: 1000,
+          roleReevaluationTimeout: 30000,
+          qualityThreshold: 0.3,
+          activityThreshold: 0.1
+        }
       },
       ui: {
         insightFrequencyMs: 3000,

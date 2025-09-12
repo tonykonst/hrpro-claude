@@ -51,12 +51,7 @@ export default defineConfig({
 
   // CSS настройки
   css: {
-    postcss: {
-      plugins: [
-        require('tailwindcss'),
-        require('autoprefixer')
-      ]
-    }
+    postcss: './postcss.config.js'
   },
 
   // Переменные окружения - только базовые, остальные через preload script

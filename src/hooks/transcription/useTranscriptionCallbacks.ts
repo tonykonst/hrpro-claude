@@ -121,8 +121,19 @@ export const useTranscriptionCallbacks = ({
     }
   }, [setTranscript, setPartialTranscript, analyzeWithClaude]);
 
+  // Placeholder methods for native hooks
+  const onTranscriptUpdate = useCallback((callback: (data: any) => void) => {
+    // Placeholder implementation
+  }, []);
+
+  const onInsightUpdate = useCallback((callback: (data: any) => void) => {
+    // Placeholder implementation
+  }, []);
+
   return {
     analyzeWithClaude,
-    handleTranscriptEvent
+    handleTranscriptEvent,
+    onTranscriptUpdate,
+    onInsightUpdate
   };
 };

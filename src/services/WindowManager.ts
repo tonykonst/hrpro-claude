@@ -8,27 +8,38 @@
  * - Автоматическая очистка ресурсов
  */
 
-import { EventEmitter } from 'events';
+// Simple event emitter for renderer process
+class SimpleEventEmitter {
+  private listeners: { [event: string]: Function[] } = {};
 
-// Типы для electronAPI
-declare global {
-  interface Window {
-    electronAPI: {
-      createDataWindow: () => Promise<any>;
-      closeDataWindow: () => Promise<any>;
-      getConfig: () => Promise<any>;
-      sendTranscript: (data: any) => Promise<any>;
-      sendInsights: (data: any) => Promise<any>;
-      sendRecordingState: (data: any) => Promise<any>;
-      onTranscriptUpdate: (callback: (data: any) => void) => void;
-      onInsightsUpdate: (callback: (data: any) => void) => void;
-      onRecordingStateChange: (callback: (data: any) => void) => void;
-      onWindowCreated: (callback: (windowId: string) => void) => void;
-      onWindowClosed: (callback: (windowId: string) => void) => void;
-      removeAllListeners: (channel: string) => void;
-    };
+  on(event: string, listener: Function): void {
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
+    }
+    this.listeners[event].push(listener);
+  }
+
+  off(event: string, listener: Function): void {
+    if (this.listeners[event]) {
+      const index = this.listeners[event].indexOf(listener);
+      if (index > -1) {
+        this.listeners[event].splice(index, 1);
+      }
+    }
+  }
+
+  emit(event: string, ...args: any[]): void {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach(listener => listener(...args));
+    }
+  }
+
+  removeAllListeners(): void {
+    this.listeners = {};
   }
 }
+
+// Типы для electronAPI - используем глобальное определение из App.tsx
 
 export interface WindowState {
   isVisible: boolean;
@@ -51,7 +62,7 @@ export interface WindowConfig {
   resizable?: boolean;
 }
 
-export class WindowManager extends EventEmitter {
+export class WindowManager extends SimpleEventEmitter {
   private static instance: WindowManager;
   private windows: Map<string, any> = new Map();
   private windowStates: Map<string, WindowState> = new Map();

@@ -48,6 +48,18 @@ export interface AudioConfig {
   noiseSuppression: boolean;
   autoGainControl: boolean;
   chunkSize: number;
+  maxBufferSize: number; // Максимальный размер аудио буфера в байтах
+  split: {
+    enabled: boolean;
+    autoDetectRoles: boolean;
+    candidateSource: string | null; // ID источника для кандидата
+    hrSource: string | null; // ID источника для HR
+    fallbackToSingleStream: boolean;
+    monitoringInterval: number; // мс
+    roleReevaluationTimeout: number; // мс
+    qualityThreshold: number; // 0-1
+    activityThreshold: number; // 0-1
+  };
 }
 
 export interface UIConfig {
@@ -83,8 +95,8 @@ class ConfigService implements IConfigService {
       api: {
         deepgram: {
           apiKey: this.getEnvVar('DEEPGRAM_API_KEY', ''),
-          model: 'nova-2-meeting', // ПРИНУДИТЕЛЬНО: специально для быстрой речи и совещаний
-          language: '', // ПРИНУДИТЕЛЬНО: автоопределение языка
+          model: 'nova-2-general', // ПРИНУДИТЕЛЬНО: поддерживает автоопределение языка
+          language: '', // ПРИНУДИТЕЛЬНО: автоопределение языка (пустая строка = auto)
           punctuation: true, // ПРИНУДИТЕЛЬНО: включена
           interimResults: true, // ПРИНУДИТЕЛЬНО: включены
           smartFormat: true, // ПРИНУДИТЕЛЬНО: включен
@@ -140,6 +152,18 @@ class ConfigService implements IConfigService {
         autoGainControl:
           this.getEnvVar('AUDIO_AUTO_GAIN_CONTROL', 'true') === 'true',
         chunkSize: parseInt(this.getEnvVar('AUDIO_CHUNK_SIZE', '250')),
+        maxBufferSize: parseInt(this.getEnvVar('AUDIO_MAX_BUFFER_SIZE', '1048576')), // 1MB по умолчанию
+        split: {
+          enabled: this.getEnvVar('AUDIO_SPLIT_ENABLED', 'false') === 'true',
+          autoDetectRoles: this.getEnvVar('AUDIO_SPLIT_AUTO_DETECT_ROLES', 'true') === 'true',
+          candidateSource: this.getEnvVar('AUDIO_SPLIT_CANDIDATE_SOURCE', '') || '',
+          hrSource: this.getEnvVar('AUDIO_SPLIT_HR_SOURCE', '') || '',
+          fallbackToSingleStream: this.getEnvVar('AUDIO_SPLIT_FALLBACK_TO_SINGLE', 'true') === 'true',
+          monitoringInterval: parseInt(this.getEnvVar('AUDIO_SPLIT_MONITORING_INTERVAL', '1000')),
+          roleReevaluationTimeout: parseInt(this.getEnvVar('AUDIO_SPLIT_ROLE_REEVALUATION_TIMEOUT', '30000')),
+          qualityThreshold: parseFloat(this.getEnvVar('AUDIO_SPLIT_QUALITY_THRESHOLD', '0.3')),
+          activityThreshold: parseFloat(this.getEnvVar('AUDIO_SPLIT_ACTIVITY_THRESHOLD', '0.1')),
+        },
       },
       ui: {
         insightFrequencyMs: parseInt(
@@ -186,8 +210,9 @@ class ConfigService implements IConfigService {
   }
 
   private getDefaultKeywords(): string {
-    // IT-термины с весами для лучшего распознавания
+    // IT-термины с весами для лучшего распознавания (английские + русские)
     const keywords = [
+      // English IT terms
       'React:10',
       'JavaScript:10',
       'TypeScript:10',
@@ -236,6 +261,42 @@ class ConfigService implements IConfigService {
       'serverless:6',
       'DevOps:6',
       'CI/CD:6',
+      // Russian IT terms
+      'интервью:8',
+      'разработчик:8',
+      'программист:8',
+      'код:6',
+      'проект:6',
+      'задача:6',
+      'функция:6',
+      'метод:6',
+      'класс:6',
+      'интерфейс:6',
+      'сервис:6',
+      'контроллер:6',
+      'репозиторий:6',
+      'база данных:8',
+      'фронтенд:8',
+      'бэкенд:8',
+      'архитектура:6',
+      'алгоритм:6',
+      'структура:6',
+      'массив:6',
+      'объект:6',
+      'переменная:6',
+      'константа:6',
+      'тип:6',
+      'модель:6',
+      'схема:6',
+      'конфигурация:6',
+      'деплой:6',
+      'тестирование:6',
+      'отладка:6',
+      'оптимизация:6',
+      'производительность:6',
+      'безопасность:6',
+      'авторизация:6',
+      'аутентификация:6',
     ];
     return keywords.join(',');
   }
@@ -433,6 +494,29 @@ class ConfigService implements IConfigService {
         noiseSuppression: this.config.audio.noiseSuppression,
         autoGainControl: this.config.audio.autoGainControl,
       },
+    };
+  }
+
+  getAudioSplitConfig() {
+    return {
+      enabled: this.config.audio.split.enabled,
+      autoDetectRoles: this.config.audio.split.autoDetectRoles,
+      candidateSource: this.config.audio.split.candidateSource,
+      hrSource: this.config.audio.split.hrSource,
+      fallbackToSingleStream: this.config.audio.split.fallbackToSingleStream,
+      monitoringInterval: this.config.audio.split.monitoringInterval,
+      roleReevaluationTimeout: this.config.audio.split.roleReevaluationTimeout,
+      qualityThreshold: this.config.audio.split.qualityThreshold,
+      activityThreshold: this.config.audio.split.activityThreshold,
+    };
+  }
+
+  getAudioBufferConfig() {
+    return {
+      maxBufferSize: this.config.audio.maxBufferSize,
+      sampleRate: this.config.audio.sampleRate,
+      channels: this.config.audio.channels,
+      chunkSize: this.config.audio.chunkSize,
     };
   }
 

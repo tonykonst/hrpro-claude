@@ -1,27 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { ControlPanel, DataWindow } from "./components";
+import { NativeAudioOverlay } from "./components/overlay";
 import { useWindowManager } from "./hooks/useWindowManager";
 import { useDataSync } from "./hooks/useDataSync";
-import { useTranscription } from "./hooks/transcription";
+import { useTranscriptionElectron } from "./hooks/transcription/useTranscriptionElectron";
 import { useAudioRecording } from "./hooks/useAudioRecording";
 
 // Типы для IPC - теперь используется безопасный electronAPI
 declare global {
   interface Window {
-    electronAPI: {
-      getConfig: () => Promise<any>;
-      sendTranscript: (data: any) => Promise<any>;
-      sendInsights: (data: any) => Promise<any>;
-      sendRecordingState: (data: any) => Promise<any>;
-      createDataWindow: () => Promise<any>;
-      closeDataWindow: () => Promise<any>;
-      onTranscriptUpdate: (callback: (data: any) => void) => void;
-      onInsightsUpdate: (callback: (data: any) => void) => void;
-      onRecordingStateChange: (callback: (data: any) => void) => void;
-      onWindowCreated: (callback: (windowId: string) => void) => void;
-      onWindowClosed: (callback: (windowId: string) => void) => void;
-      removeAllListeners: (channel: string) => void;
-    };
+    electronAPI: any; // Упрощенное определение, так как типы уже определены в preload.ts
   }
 }
 
@@ -35,7 +23,7 @@ export function App() {
   const [clickThrough, setClickThrough] = useState(false);
   
   // Хуки для функциональности
-  const transcription = useTranscription();
+  const transcription = useTranscriptionElectron();
   const audioRecording = useAudioRecording();
   
   // Window manager hook
@@ -99,6 +87,11 @@ export function App() {
         isRecording={transcription.isRecording}
       />
     );
+  }
+
+  // Render native audio overlay if this is the overlay window
+  if (windowType === 'native-audio-overlay') {
+    return <NativeAudioOverlay />;
   }
 
   return (

@@ -30,6 +30,12 @@ interface UseTranscriptionCoreProps {
   handleTranscriptEvent: (event: TranscriptEvent) => Promise<void>;
   transcriptRef: React.MutableRefObject<string[]>;
   insightsRef: React.MutableRefObject<any[]>;
+  setTranscript?: (transcript: string | ((prev: string) => string)) => void;
+  setPartialTranscript?: (partialTranscript: string | ((prev: string) => string)) => void;
+  setInsights?: (insights: any[] | ((prev: any[]) => any[])) => void;
+  setIsRecording?: (recording: boolean) => void;
+  onTranscriptUpdate?: (callback: (data: any) => void) => void;
+  onInsightUpdate?: (callback: (data: any) => void) => void;
 }
 
 export const useTranscriptionCore = ({
@@ -39,7 +45,13 @@ export const useTranscriptionCore = ({
   cleanupRef,
   handleTranscriptEvent,
   transcriptRef,
-  insightsRef
+  insightsRef,
+  setTranscript,
+  setPartialTranscript,
+  setInsights,
+  setIsRecording,
+  onTranscriptUpdate,
+  onInsightUpdate
 }: UseTranscriptionCoreProps) => {
   const memoryCleanupIntervalRef = useRef<NodeJS.Timeout | null>(null);
 

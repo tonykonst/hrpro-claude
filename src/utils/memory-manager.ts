@@ -6,6 +6,7 @@
  */
 
 import { Logger } from './logger';
+import { configService } from '../services/config';
 
 export interface Insight {
   id: string;
@@ -28,7 +29,13 @@ export interface CleanupResult {
 export class MemoryManager {
   private static readonly MAX_TRANSCRIPT_WORDS = 1000;
   private static readonly MAX_INSIGHTS_HISTORY = 50;
-  private static readonly MAX_AUDIO_BUFFER_SIZE = 1024 * 1024; // 1MB
+  
+  /**
+   * Получить максимальный размер аудио буфера из конфигурации
+   */
+  private static getMaxAudioBufferSize(): number {
+    return configService.getAudioBufferConfig().maxBufferSize;
+  }
 
   /**
    * Clean old data to prevent memory leaks
@@ -83,7 +90,7 @@ export class MemoryManager {
     return {
       maxTranscriptWords: this.MAX_TRANSCRIPT_WORDS,
       maxInsightsHistory: this.MAX_INSIGHTS_HISTORY,
-      maxAudioBufferSize: this.MAX_AUDIO_BUFFER_SIZE,
+      maxAudioBufferSize: this.getMaxAudioBufferSize(),
     };
   }
 

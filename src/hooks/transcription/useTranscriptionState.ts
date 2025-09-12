@@ -57,18 +57,38 @@ export const useTranscriptionState = () => {
     }
   }, []);
 
+  // Дополнительные методы для native hooks
+  const clearTranscript = useCallback(() => {
+    setTranscript('');
+  }, [setTranscript]);
+
+  const clearInsights = useCallback(() => {
+    setInsights([]);
+  }, [setInsights]);
+
+  const clearError = useCallback(() => {
+    // Placeholder for error clearing
+  }, []);
+
   return {
     // Состояния
     transcript,
     partialTranscript,
     insights,
     isRecording,
+    isConnected: false, // Placeholder
+    error: null, // Placeholder
     
     // Сеттеры
     setTranscript,
     setPartialTranscript,
     setInsights,
     setIsRecording,
+    
+    // Методы очистки
+    clearTranscript,
+    clearInsights,
+    clearError,
     
     // Refs для MemoryManager
     transcriptRef,
