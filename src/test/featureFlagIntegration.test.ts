@@ -18,7 +18,7 @@ import {
   isAnyBrowserCaptureAvailable,
   getAvailableCaptureMethods,
 } from '../config/featureFlags';
-import { captureService } from '../services/featureFlaggedCapture';
+import { getBrowserCaptureService } from '../services/browserCaptureService';
 
 describe('Feature Flag Integration', () => {
   beforeEach(() => {
@@ -63,13 +63,11 @@ describe('Feature Flag Integration', () => {
   describe('Capture Service Integration', () => {
     it('should only provide microphone source when browser capture is disabled', () => {
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', false);
-      
-      const sources = captureService.getAvailableSources();
-      expect(sources).toHaveLength(1);
-      expect(sources[0].id).toBe('microphone');
-      expect(sources[0].type).toBe('microphone');
+      const service = getBrowserCaptureService();
+      const capabilities = service.getCapabilities();
+      expect(capabilities.availableSources).toEqual(['microphone']);
     });
-    
+
     it('should provide multiple sources when browser capture is enabled', () => {
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', true);
       setFeatureFlag('ENABLE_CHROME_EXTENSION', true);
@@ -80,11 +78,12 @@ describe('Feature Flag Integration', () => {
         configurable: true,
       });
       
-      const sources = captureService.getAvailableSources();
-      expect(sources.length).toBeGreaterThan(1);
-      expect(sources.some(s => s.type === 'browser-tab')).toBe(true);
+      const service = getBrowserCaptureService();
+      const capabilities = service.getCapabilities();
+      expect(capabilities.availableSources.length).toBeGreaterThan(1);
+      expect(capabilities.availableSources).toContain('browser-tab');
     });
-    
+
     it('should fall back to microphone when requested source is unavailable', async () => {
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', false);
       setFeatureFlag('ENABLE_AUTO_SOURCE_FALLBACK', true);
@@ -99,11 +98,9 @@ describe('Feature Flag Integration', () => {
         getUserMedia: vi.fn().mockResolvedValue(mockStream),
       } as any;
       
-      const result = await captureService.startCapture({
-        source: 'browser-tab', // This source won't be available
-        quality: 'high',
-      });
-      
+      const service = getBrowserCaptureService();
+      const result = await service.startCapture('browser-tab');
+
       expect(result.source).toBe('microphone');
       expect(result.fallbackUsed).toBe(true);
     });
@@ -151,15 +148,16 @@ describe('Feature Flag Integration', () => {
       // These should not throw
       expect(() => {
         const methods = getAvailableCaptureMethods();
-        const sources = captureService.getAvailableSources();
+        const service = getBrowserCaptureService();
+        service.getCapabilities();
         const available = isAnyBrowserCaptureAvailable();
       }).not.toThrow();
-      
+
       // Should still have microphone
       const methods = getAvailableCaptureMethods();
       expect(methods).toContain('microphone');
     });
-    
+
     it('should handle capture errors gracefully', async () => {
       setFeatureFlag('ENABLE_AUTO_SOURCE_FALLBACK', false);
       
@@ -168,11 +166,9 @@ describe('Feature Flag Integration', () => {
         getUserMedia: vi.fn().mockRejectedValue(new Error('Permission denied')),
       } as any;
       
-      const result = await captureService.startCapture({
-        source: 'microphone',
-        quality: 'high',
-      });
-      
+      const service = getBrowserCaptureService();
+      const result = await service.startCapture('microphone');
+
       expect(result.stream).toBeNull();
       expect(result.error).toBeDefined();
       expect(result.error?.message).toContain('Permission denied');

@@ -92,19 +92,17 @@ const methods = getAvailableCaptureMethods();
 ### Using the Capture Service
 
 ```typescript
-import { captureService, isBrowserCaptureAvailable } from './services/featureFlaggedCapture';
+import { getBrowserCaptureService, isBrowserCaptureAvailable } from './services/browserCaptureService';
 
 // Check availability
 if (isBrowserCaptureAvailable()) {
+  const service = getBrowserCaptureService();
   // Get sources
-  const sources = captureService.getAvailableSources();
-  
+  const sources = service.getCapabilities().availableSources;
+
   // Start capture (auto-fallback to microphone if needed)
-  const result = await captureService.startCapture({
-    source: 'browser-tab',
-    quality: 'high'
-  });
-  
+  const result = await service.startCapture('browser-tab');
+
   if (result.fallbackUsed) {
     console.log('Fell back to microphone');
   }

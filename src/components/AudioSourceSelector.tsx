@@ -11,7 +11,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useFeatureFlag, useBrowserCapture } from '../hooks/useFeatureFlags';
-import { captureService } from '../services/featureFlaggedCapture';
+import { getBrowserCaptureService } from '../services/browserCaptureService';
 
 interface AudioSourceSelectorProps {
   onSourceChange?: (source: string) => void;
@@ -35,20 +35,47 @@ export const AudioSourceSelector: React.FC<AudioSourceSelectorProps> = ({
   
   // Get available sources on mount and when flags change
   useEffect(() => {
-    const sources = captureService.getAvailableSources();
+    const service = getBrowserCaptureService();
+    const capabilities = service.getCapabilities();
+
+    const sources = capabilities.availableSources.map(id => ({
+      id,
+      label:
+        id === 'microphone'
+          ? 'Microphone'
+          : id === 'browser-tab'
+            ? 'Browser Tab Audio'
+            : id === 'screen-with-audio'
+              ? 'Screen with Audio'
+              : 'System Audio',
+      type: id,
+      available: true,
+      requiresExtension:
+        id === 'browser-tab' && capabilities.requiresExtension && !capabilities.extensionInstalled,
+    }));
+
     setAvailableSources(sources);
 
     // If the current selected source is not available, switch to microphone
-    const isSelectedSourceAvailable = sources.some(source =>
-      source.id === selectedSource && source.available
+    const isSelectedSourceAvailable = capabilities.availableSources.includes(
+      selectedSource as any
     );
 
     if (!isSelectedSourceAvailable && selectedSource !== 'microphone') {
-      console.log(`🔄 [AudioSourceSelector] Selected source '${selectedSource}' not available, switching to microphone`);
+      console.log(
+        `🔄 [AudioSourceSelector] Selected source '${selectedSource}' not available, switching to microphone`
+      );
       setSelectedSource('microphone');
       onSourceChange?.('microphone');
     }
-  }, [browserCaptureEnabled, chromeEnabled, safariEnabled, firefoxEnabled, selectedSource, onSourceChange]);
+  }, [
+    browserCaptureEnabled,
+    chromeEnabled,
+    safariEnabled,
+    firefoxEnabled,
+    selectedSource,
+    onSourceChange,
+  ]);
   
   // Handle source change
   const handleSourceChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
