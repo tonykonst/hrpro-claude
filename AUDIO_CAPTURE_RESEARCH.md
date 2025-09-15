@@ -90,7 +90,9 @@ const stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions)
 4. Нажмите "Share"
 
 ### Firefox:
-❌ Не поддерживает захват аудио
+❌ По умолчанию отключен из-за отсутствия стабильной поддержки.
+При попытке использовать `getDisplayMedia` приложение проверит наличие аудиотрека.
+Подробности см. в [MDN документации](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia#browser_compatibility).
 
 ## 🔧 Тестирование
 
@@ -101,6 +103,10 @@ const stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions)
 - Выбрать вкладку с YouTube
 - Отметить "Share tab audio"
 - Проверить визуализацию и воспроизведение
+
+При отсутствии аудиотрека теперь появляется встроенное уведомление
+с подсказкой и кнопкой **Retry**, чтобы пользователь мог повторить
+захват после отметки "Share tab audio".
 
 ## 📚 Источники
 

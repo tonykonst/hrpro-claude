@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { detectBrowser, BrowserInfo } from '../utils/browserDetection';
 import { useSafariCapture } from './useSafariCapture';
+import { getBrowserCaptureConfig } from '../config/browserCaptureConfig';
 
 export type CaptureMethod = 'safari-screen' | 'chrome-extension' | 'generic-screen' | 'unsupported';
 
@@ -110,20 +111,22 @@ export const useCrossBrowserAudio = (options: UseCrossBrowserAudioOptions = {}):
   // Chrome extension state
   const [isExtensionInstalled, setIsExtensionInstalled] = useState(false);
 
-  // Check for Chrome extension
+  // Check for Chrome extension via runtime messaging
   useEffect(() => {
-    if (browser.supportsExtensions) {
-      // Check if extension is installed by looking for injected element
+    if (browser.supportsExtensions && typeof window !== 'undefined' && window.chrome?.runtime?.sendMessage) {
+      const { chrome: chromeCfg } = getBrowserCaptureConfig();
       const checkExtension = () => {
-        const extensionElement = document.getElementById('hrpro-audio-capture-extension');
-        setIsExtensionInstalled(!!extensionElement);
+        try {
+          window.chrome.runtime.sendMessage(chromeCfg.extensionId, { type: 'PING' }, () => {
+            setIsExtensionInstalled(!window.chrome.runtime.lastError);
+          });
+        } catch {
+          setIsExtensionInstalled(false);
+        }
       };
-      
+
       checkExtension();
-      
-      // Re-check periodically in case extension is installed later
-      const interval = setInterval(checkExtension, 2000);
-      
+      const interval = setInterval(checkExtension, 5000);
       return () => clearInterval(interval);
     }
   }, [browser.supportsExtensions]);

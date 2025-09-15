@@ -6,6 +6,7 @@ import { useTranscriptionExtended } from "./hooks/transcription";
 import { useAudioRecording } from "./hooks/useAudioRecording";
 import { FeatureFlagPanel } from "./components/FeatureFlagPanel";
 import { AudioSourceSelector } from "./components/AudioSourceSelector";
+import { AudioCaptureInstructions } from "./components";
 
 // Типы для IPC - теперь используется безопасный electronAPI
 declare global {
@@ -130,6 +131,7 @@ export function App() {
         defaultOpen={false}
         position="bottom-right"
       />
+      <AudioCaptureInstructions />
     </>
   );
 }

@@ -101,6 +101,11 @@ npm run dev:electron
 - **Audio Monitoring**: Visual feedback of audio levels
 - **Session Logging**: All data is automatically saved and logged
 
+### Browser Audio Capture
+- When sharing a tab or screen, make sure the **"Share tab audio"** checkbox is enabled.
+- If no audio track is captured, the app now shows a prompt with instructions and a **Retry** button.
+- Firefox capture is disabled by default due to limited support; see [MDN compatibility table](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia#browser_compatibility).
+
 ## 🏛️ Project Structure
 
 ```

@@ -237,7 +237,7 @@ describe('Cross-Browser Integration Tests', () => {
         name: 'Chrome',
         userAgent: 'Mozilla/5.0 Chrome/120.0.0.0 Safari/537.36',
         vendor: 'Google Inc.',
-        expectsExtension: true,
+        expectsExtension: false,
       },
       {
         name: 'Safari',
@@ -255,7 +255,7 @@ describe('Cross-Browser Integration Tests', () => {
         name: 'Edge',
         userAgent: 'Mozilla/5.0 Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
         vendor: 'Microsoft Corporation',
-        expectsExtension: true,
+        expectsExtension: false,
       },
     ];
 
@@ -273,12 +273,7 @@ describe('Cross-Browser Integration Tests', () => {
         const capabilities = service.getCapabilities();
 
         expect(capabilities.availableSources).toContain('microphone');
-        
-        if (browser.expectsExtension) {
-          expect(capabilities.requiresExtension).toBe(true);
-        } else {
-          expect(capabilities.requiresExtension).toBe(false);
-        }
+        expect(capabilities.requiresExtension).toBe(false);
       });
     });
   });

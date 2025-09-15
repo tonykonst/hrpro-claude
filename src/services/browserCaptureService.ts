@@ -16,13 +16,15 @@
  * ╚════════════════════════════════════════════════════════════════════════════╝
  */
 
-import { 
-  getFeatureFlags, 
+import {
+  getFeatureFlags,
   isFeatureEnabled,
-  getAvailableCaptureMethods 
+  getAvailableCaptureMethods,
+  setFeatureFlag
 } from '../config/featureFlags';
 import { SafariCaptureService } from './safari-capture';
 import { detectBrowser } from '../utils/browserDetection';
+import { getBrowserCaptureConfig } from '../config/browserCaptureConfig';
 
 // ============================================================================
 // SERVICE TYPES
@@ -64,9 +66,13 @@ export class BrowserCaptureService {
   private currentStream: MediaStream | null = null;
   private currentSource: AudioSource = 'microphone';
   private isCapturing: boolean = false;
+  private extensionInstalled = false;
+  private firefoxAudioSupported: boolean | null = null;
 
   constructor() {
     this.initialize();
+    this.checkChromeExtension();
+    this.detectFirefoxAudioSupport();
   }
 
   /**
@@ -129,7 +135,7 @@ export class BrowserCaptureService {
       availableSources: ['microphone'],
       limitations: [],
       requiresExtension: false,
-      extensionInstalled: false,
+      extensionInstalled: this.extensionInstalled,
     };
 
     // Check Safari capabilities
@@ -140,30 +146,27 @@ export class BrowserCaptureService {
       capabilities.limitations.push('Requires screen sharing to capture audio');
     }
 
-    // Check Chrome capabilities
-    if (flags.ENABLE_CHROME_EXTENSION && browser.name.includes('chrome')) {
-      capabilities.requiresExtension = true;
-      // Check if extension is installed (placeholder)
-      capabilities.extensionInstalled = this.checkChromeExtension();
-      
-      if (capabilities.extensionInstalled) {
-        capabilities.canCaptureTab = true;
-        capabilities.canCaptureBrowserAudio = true;
-        capabilities.availableSources.push('browser-tab');
-      } else {
-        capabilities.limitations.push('Chrome extension required for tab audio');
-      }
-      
-      // Screen capture is always available
+    // Chrome and Edge capabilities - tab capture via getDisplayMedia
+    if (browser.name.includes('chrome') || browser.name.includes('edge')) {
+      capabilities.canCaptureTab = true;
       capabilities.canCaptureScreen = true;
-      capabilities.availableSources.push('screen-with-audio');
+      capabilities.canCaptureBrowserAudio = true;
+      capabilities.availableSources.push('browser-tab', 'screen-with-audio');
+
+      if (flags.ENABLE_CHROME_EXTENSION && !this.extensionInstalled) {
+        capabilities.limitations.push('Chrome extension not detected - install for advanced features');
+      }
     }
 
-    // Check Firefox capabilities
-    if (flags.ENABLE_FIREFOX_CAPTURE && browser.name.includes('firefox')) {
-      capabilities.canCaptureScreen = true;
-      capabilities.availableSources.push('screen-with-audio');
-      capabilities.limitations.push('Limited audio capture support');
+    // Firefox capabilities gated by runtime detection
+    if (browser.name.includes('firefox')) {
+      if (flags.ENABLE_FIREFOX_CAPTURE && this.firefoxAudioSupported) {
+        capabilities.canCaptureScreen = true;
+        capabilities.canCaptureBrowserAudio = true;
+        capabilities.availableSources.push('screen-with-audio');
+      } else {
+        capabilities.limitations.push('Firefox audio capture disabled - see MDN for current support');
+      }
     }
 
     // Future: System audio (Phase 2)
@@ -258,10 +261,13 @@ export class BrowserCaptureService {
     const flags = getFeatureFlags();
     const browser = detectBrowser();
 
-    // Проверяем поддержку расширения
-    if (flags.ENABLE_CHROME_EXTENSION && this.checkChromeExtension()) {
-      // TODO: Implement actual Chrome extension communication
-      console.log('[BrowserCapture] Chrome extension detected, but integration pending');
+    // Prompt to install extension when advanced features requested
+    if (flags.ENABLE_CHROME_EXTENSION && !this.extensionInstalled) {
+      if (typeof alert === 'function') {
+        alert('For advanced tab capture features, please install our Chrome extension.');
+      } else {
+        console.warn('[BrowserCapture] Chrome extension not detected');
+      }
     }
 
     // Используем getDisplayMedia как основной метод (работает без расширения!)
@@ -293,7 +299,13 @@ export class BrowserCaptureService {
       // Проверяем аудио
       const audioTracks = stream.getAudioTracks();
       if (audioTracks.length === 0) {
-        throw new Error('No audio captured. Please select a browser tab and enable "Share tab audio".');
+        stream.getTracks().forEach(track => track.stop());
+        window.dispatchEvent(
+          new CustomEvent('audio-capture-instructions', {
+            detail: { onRetry: () => this.startCapture('browser-tab') }
+          })
+        );
+        return { stream: null, source: 'browser-tab', error: new Error('No audio captured') };
       }
 
       // Удаляем видео если не нужно
@@ -371,7 +383,13 @@ export class BrowserCaptureService {
       // Проверяем наличие аудио трека
       const audioTracks = stream.getAudioTracks();
       if (audioTracks.length === 0) {
-        console.warn('[BrowserCapture] No audio track captured. User may not have selected "Share tab audio" option.');
+        stream.getTracks().forEach(track => track.stop());
+        window.dispatchEvent(
+          new CustomEvent('audio-capture-instructions', {
+            detail: { onRetry: () => this.startCapture('screen-with-audio') }
+          })
+        );
+        return { stream: null, source: 'screen-with-audio', error: new Error('No audio captured') };
       } else {
         console.log('[BrowserCapture] Audio track captured successfully:', audioTracks[0].label);
       }
@@ -441,15 +459,67 @@ export class BrowserCaptureService {
   }
 
   /**
-   * Check if Chrome extension is installed
+   * Check if Chrome extension is installed via runtime messaging
    */
-  private checkChromeExtension(): boolean {
-    // TODO: Implement actual extension check
-    // This would involve sending a message to the extension
-    // and checking for a response
-    
-    // For now, return false (not installed)
-    return false;
+  private async checkChromeExtension(): Promise<void> {
+    if (typeof window === 'undefined' || !window.chrome?.runtime?.sendMessage) {
+      this.extensionInstalled = false;
+      return;
+    }
+
+    const { chrome } = getBrowserCaptureConfig();
+    const extensionId = chrome.extensionId;
+
+    await new Promise<void>(resolve => {
+      try {
+        const timer = setTimeout(() => {
+          this.extensionInstalled = false;
+          resolve();
+        }, 1000);
+
+        window.chrome.runtime.sendMessage(extensionId, { type: 'PING' }, () => {
+          clearTimeout(timer);
+          this.extensionInstalled = !window.chrome.runtime.lastError;
+          resolve();
+        });
+      } catch (err) {
+        this.extensionInstalled = false;
+        resolve();
+      }
+    });
+  }
+
+  /**
+   * Detect if Firefox can provide audio in getDisplayMedia
+   */
+  private async detectFirefoxAudioSupport(): Promise<void> {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getDisplayMedia
+    ) {
+      this.firefoxAudioSupported = false;
+      return;
+    }
+
+    const browser = detectBrowser();
+    if (!browser.name.includes('firefox')) {
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        audio: true,
+        video: true,
+      });
+      const hasAudio = stream.getAudioTracks().length > 0;
+      stream.getTracks().forEach(track => track.stop());
+      this.firefoxAudioSupported = hasAudio;
+      if (hasAudio) {
+        setFeatureFlag('ENABLE_FIREFOX_CAPTURE', true);
+      }
+    } catch {
+      this.firefoxAudioSupported = false;
+    }
   }
 
   /**
