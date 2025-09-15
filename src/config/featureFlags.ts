@@ -238,11 +238,9 @@ export function getFeatureWithFallback(
  */
 export function isAnyBrowserCaptureAvailable(): boolean {
   const flags = getFeatureFlags();
-  return flags.ENABLE_BROWSER_CAPTURE && (
-    flags.ENABLE_CHROME_EXTENSION ||
-    flags.ENABLE_SAFARI_CAPTURE ||
-    flags.ENABLE_FIREFOX_CAPTURE
-  );
+  // Chrome/Edge capture works natively via getDisplayMedia, so the master
+  // flag alone determines availability.
+  return flags.ENABLE_BROWSER_CAPTURE;
 }
 
 /**
@@ -256,9 +254,8 @@ export function getAvailableCaptureMethods(): string[] {
     return ['microphone'];  // Fallback to microphone only
   }
   
-  if (flags.ENABLE_CHROME_EXTENSION) {
-    methods.push('chrome-tab', 'chrome-screen');
-  }
+  // Chrome-based browsers support tab and screen capture without extension
+  methods.push('chrome-tab', 'chrome-screen');
   
   if (flags.ENABLE_SAFARI_CAPTURE) {
     methods.push('safari-screen');

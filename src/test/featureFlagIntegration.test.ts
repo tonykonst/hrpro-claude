@@ -185,13 +185,13 @@ describe('Feature Flag Integration', () => {
       expect(isAnyBrowserCaptureAvailable()).toBe(true);
     });
     
-    it('should return false when no browser capture methods are enabled', () => {
+    it('should report capture available even when all browser-specific flags are disabled', () => {
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', true);
       setFeatureFlag('ENABLE_CHROME_EXTENSION', false);
       setFeatureFlag('ENABLE_SAFARI_CAPTURE', false);
       setFeatureFlag('ENABLE_FIREFOX_CAPTURE', false);
-      
-      expect(isAnyBrowserCaptureAvailable()).toBe(false);
+
+      expect(isAnyBrowserCaptureAvailable()).toBe(true);
     });
   });
 });

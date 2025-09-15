@@ -66,7 +66,7 @@ describe('Cross-Browser Audio Capture System', () => {
       expect(browser.name).toBe('chrome');
       expect(browser.supportsExtensions).toBe(true);
       expect(browser.supportsTabCapture).toBe(true);
-      expect(browser.preferredCaptureMethod).toBe('extension');
+      expect(browser.preferredCaptureMethod).toBe('screen');
       expect(browser.isMobile).toBe(false);
       expect(browser.isIOS).toBe(false);
     });
@@ -121,7 +121,7 @@ describe('Cross-Browser Audio Capture System', () => {
       expect(browser.name).toBe('edge');
       expect(browser.supportsExtensions).toBe(true);
       expect(browser.supportsTabCapture).toBe(true);
-      expect(browser.preferredCaptureMethod).toBe('extension');
+      expect(browser.preferredCaptureMethod).toBe('screen');
     });
 
     it('should correctly detect iOS Safari', () => {
@@ -224,15 +224,15 @@ describe('Cross-Browser Audio Capture System', () => {
       expect(instructions).toContain('window or screen');
     });
 
-    it('should return Chrome extension instructions', () => {
+    it('should return Chrome tab capture instructions', () => {
       Object.defineProperty(navigator, 'userAgent', {
         value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
         writable: true,
       });
 
       const instructions = getCaptureInstructions();
-      expect(instructions).toContain('Chrome extension');
       expect(instructions).toContain('Share tab audio');
+      expect(instructions).not.toContain('extension');
     });
   });
 
@@ -380,9 +380,10 @@ describe('Cross-Browser Audio Capture System', () => {
       const capabilities = captureService.getCapabilities();
       
       expect(capabilities.canCaptureScreen).toBe(true);
-      expect(capabilities.requiresExtension).toBe(true);
+      expect(capabilities.requiresExtension).toBe(false);
       expect(capabilities.availableSources).toContain('microphone');
       expect(capabilities.availableSources).toContain('screen-with-audio');
+      expect(capabilities.availableSources).toContain('browser-tab');
     });
 
     it('should get correct capabilities for Safari', () => {
@@ -540,15 +541,11 @@ describe('Cross-Browser Audio Capture System', () => {
       const service = new BrowserCaptureService();
       const capabilities = service.getCapabilities();
       
-      // Capabilities should match browser features
-      if (browser.supportsExtensions) {
-        expect(capabilities.requiresExtension).toBe(true);
-      }
-      
+      expect(capabilities.requiresExtension).toBe(false);
       if (browser.supportsScreenCapture) {
         expect(capabilities.canCaptureScreen).toBe(true);
       }
-      
+
       expect(capabilities.availableSources).toContain('microphone');
     });
 

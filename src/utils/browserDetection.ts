@@ -76,15 +76,10 @@ export function detectBrowser(): BrowserInfo {
   
   // Determine preferred capture method
   let preferredCaptureMethod: BrowserInfo['preferredCaptureMethod'] = 'none';
-  
-  if (!isMobile) {
-    if (supportsTabCapture) {
-      // Chrome-based browsers: prefer extension for better quality
-      preferredCaptureMethod = 'extension';
-    } else if (supportsScreenCapture) {
-      // Safari/Firefox: use screen capture
-      preferredCaptureMethod = 'screen';
-    }
+
+  if (!isMobile && supportsScreenCapture) {
+    // Default to screen capture via getDisplayMedia
+    preferredCaptureMethod = 'screen';
   }
   
   return {

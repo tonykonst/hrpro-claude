@@ -140,23 +140,18 @@ export class BrowserCaptureService {
       capabilities.limitations.push('Requires screen sharing to capture audio');
     }
 
-    // Check Chrome capabilities
-    if (flags.ENABLE_CHROME_EXTENSION && browser.name.includes('chrome')) {
-      capabilities.requiresExtension = true;
-      // Check if extension is installed (placeholder)
-      capabilities.extensionInstalled = this.checkChromeExtension();
-      
-      if (capabilities.extensionInstalled) {
-        capabilities.canCaptureTab = true;
-        capabilities.canCaptureBrowserAudio = true;
-        capabilities.availableSources.push('browser-tab');
-      } else {
-        capabilities.limitations.push('Chrome extension required for tab audio');
-      }
-      
-      // Screen capture is always available
+    // Check Chrome/Edge capabilities (tab capture works without extension)
+    if (browser.name.includes('chrome') || browser.name.includes('edge') || browser.name.includes('opera')) {
+      capabilities.canCaptureTab = true;
+      capabilities.canCaptureBrowserAudio = true;
       capabilities.canCaptureScreen = true;
+      capabilities.availableSources.push('browser-tab');
       capabilities.availableSources.push('screen-with-audio');
+
+      // Extension support remains optional for advanced automation
+      if (flags.ENABLE_CHROME_EXTENSION) {
+        capabilities.extensionInstalled = this.checkChromeExtension();
+      }
     }
 
     // Check Firefox capabilities

@@ -95,20 +95,16 @@ describe('Feature Flag System', () => {
 
     it('should report browser capture available when any browser is enabled', () => {
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', true);
-      setFeatureFlag('ENABLE_CHROME_EXTENSION', false);
-      setFeatureFlag('ENABLE_SAFARI_CAPTURE', true);
-      setFeatureFlag('ENABLE_FIREFOX_CAPTURE', false);
-      
       expect(isAnyBrowserCaptureAvailable()).toBe(true);
     });
 
-    it('should report no browser capture when all browsers are disabled', () => {
+    it('should still report browser capture when individual browser flags are disabled', () => {
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', true);
       setFeatureFlag('ENABLE_CHROME_EXTENSION', false);
       setFeatureFlag('ENABLE_SAFARI_CAPTURE', false);
       setFeatureFlag('ENABLE_FIREFOX_CAPTURE', false);
-      
-      expect(isAnyBrowserCaptureAvailable()).toBe(false);
+
+      expect(isAnyBrowserCaptureAvailable()).toBe(true);
     });
   });
 
@@ -121,14 +117,14 @@ describe('Feature Flag System', () => {
       expect(methods).toEqual(['microphone']);
     });
 
-    it('should return Chrome methods when Chrome is enabled', () => {
+    it('should return Chrome methods even when extension flag is disabled', () => {
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', true);
-      setFeatureFlag('ENABLE_CHROME_EXTENSION', true);
+      setFeatureFlag('ENABLE_CHROME_EXTENSION', false);
       setFeatureFlag('ENABLE_SAFARI_CAPTURE', false);
       setFeatureFlag('ENABLE_FIREFOX_CAPTURE', false);
-      
+
       const methods = getAvailableCaptureMethods();
-      
+
       expect(methods).toContain('chrome-tab');
       expect(methods).toContain('chrome-screen');
       expect(methods).toContain('microphone');
@@ -139,10 +135,11 @@ describe('Feature Flag System', () => {
       setFeatureFlag('ENABLE_CHROME_EXTENSION', false);
       setFeatureFlag('ENABLE_SAFARI_CAPTURE', true);
       setFeatureFlag('ENABLE_FIREFOX_CAPTURE', false);
-      
+
       const methods = getAvailableCaptureMethods();
-      
+
       expect(methods).toContain('safari-screen');
+      expect(methods).toContain('chrome-tab');
       expect(methods).toContain('microphone');
     });
 
