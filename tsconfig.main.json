@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "lib": ["ES2020"],
+    "jsx": "preserve",
+    "outDir": "./dist/main",
+    "noEmit": false
+  },
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*"
+  ],
+  "exclude": [
+    "src/components/**/*",
+    "src/hooks/**/*"
+  ]
+}

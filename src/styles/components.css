@@ -1,0 +1,479 @@
+/* Component styles based on Figma design */
+
+/* Transcript correction animation */
+.transcript-text--corrected {
+  animation: correctionFlash 0.3s ease-in-out;
+  background: rgba(76, 175, 80, 0.1);
+  border-radius: 4px;
+  padding: 2px 4px;
+  transition: all 0.3s ease;
+}
+
+@keyframes correctionFlash {
+  0% { 
+    background: rgba(76, 175, 80, 0.3);
+    transform: scale(1.02);
+  }
+  50% { 
+    background: rgba(76, 175, 80, 0.2);
+  }
+  100% { 
+    background: rgba(76, 175, 80, 0.1);
+    transform: scale(1);
+  }
+}
+
+/* 
+🎯 НАСТРОЙКА РАЗМЕРОВ КОМПОНЕНТОВ:
+
+1. Drag область:
+   - .control-panel__drag-zone padding: 0 XYZrem - ширина
+   - .control-panel__drag-zone--expanded min-width: XYZpx - минимальная ширина
+   
+2. Wave Loader:
+   - .wave-loader-container width/height - размер контейнера
+   - WaveLoader.tsx: width/height в конфигурации
+   
+3. Панель управления:
+   - .control-panel--recording height - общая высота панели
+   
+4. Кнопки:
+   - .start-button/.stop-button width/height - размер кнопок
+*/
+
+/* Control Panel - АДАПТИВНЫЙ РАЗМЕР ПО СОДЕРЖИМОМУ */
+.control-panel {
+  display: flex;
+  align-items: center;
+  /* Полностью динамическая ширина - подстраивается под все содержимое */
+  width: auto;             /* ← Автоматическая ширина без ограничений */
+  min-width: 0;            /* ← Убираем минимальную ширину */
+  max-width: 95vw;         /* ← Максимум 95% ширины экрана для мобильных */
+  /* Фиксированная высота - точно по Figma */
+  height: 56px;            /* ← Точная высота из Figma */
+  /* Figma: borderRadius: 500px, mode: row, alignItems: center */
+  border-radius: 100px;
+  /* Figma: fill_NCVW44 */
+  background: rgba(255, 255, 255, 0.4);
+  /* ВНУТРЕННИЙ БОРДЕР - не влияет на размеры */
+  box-sizing: border-box;  /* ← Бордер внутри */
+  border: 1px solid rgba(255, 255, 255, 0.3); /* ← Простой внутренний бордер */
+  overflow: visible;       /* ← Изменено с hidden на visible для корректного отображения */
+  /* Figma: effect_L81ITA */
+  box-shadow: 0px 4px 20px 0px rgba(0, 0, 0, 0.15), inset 0px 2px 4px 0px rgba(255, 255, 255, 0.25);
+
+  /* Адаптивность - все элементы в ряд */
+  flex-wrap: nowrap;       /* Не переносим элементы на новую строку */
+  gap: 0;                  /* Убираем gap для плотной упаковки */
+  white-space: nowrap;     /* Текст не переносится */
+}
+
+.control-panel--recording {
+  height: 3.5rem; /* h-14 - увеличено для Wave Loader */
+  width: fit-content; /* Адаптивная ширина для режима записи */
+}
+
+/* Audio Source Section */
+.control-panel__audio-source {
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Audio source selector - compact inline version for main panel */
+.control-panel__audio-source-compact {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0; /* Не сжимаем селектор */
+}
+
+/* Audio source selector positioned below main panel (legacy) */
+.audio-source-below {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+/* Actions Section - АДАПТИВНО ПО FIGMA */
+.control-panel__actions {
+  display: flex;
+  align-items: center;
+  /* Figma: gap: 8px, padding: 8px */
+  gap: 0; /* По умолчанию нет gap */
+  padding: 6px; /* Компактные отступы для адаптивности */
+  flex-shrink: 0;    /* Не сжимаем кнопки */
+}
+
+/* В режиме записи добавляем gap между кнопкой Stop и WaveLoader */
+.control-panel--recording .control-panel__actions {
+  gap: 12px; /* Уменьшили gap для компактности */
+}
+
+.control-panel__separator {
+  width: 1px;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* 🎯 DRAG ЗОНА - ПРОСТАЯ ПЕРЕТАСКИВАЕМАЯ ОБЛАСТЬ */
+.control-panel__drag-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Фиксированная ширина с отступами как в Figma */
+  padding: 0 20px 0 16px; /* ← Точные отступы из Figma */
+  /* 100% высота панели */
+  height: 100%;            /* ← Всегда 100% высоты панели */
+  cursor: grab;
+  /* Figma: gap: 10px, alignSelf: stretch */
+  gap: 10px;
+  align-self: stretch;
+}
+
+.control-panel__drag-zone:active {
+  cursor: grabbing;
+}
+
+/* Start Button - ТОЧНО ПО FIGMA */
+.start-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Figma: gap: 6px, padding: 0px 16px, height: 36px */
+  gap: 6px;
+  padding: 0 16px;
+  height: 36px; /* Точная высота из Figma */
+  background: #000000; /* Figma: fill_RMY68G */
+  border-radius: 18px;
+  color: #ffffff; /* Figma: fill_GERYAX */
+  /* Figma: fontSize: 12, fontWeight: 500, letterSpacing: -3% */
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  font-family: Inter, sans-serif;
+  transition: background-color 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.start-button:hover {
+  background: #374151;
+}
+
+/* Play Icon - ТОЧНО ПО FIGMA РАЗМЕРАМ */
+.start-button__icon {
+  position: relative;
+  /* Figma: Group 5 - width: 8, height: 9.94 */
+  width: 8px;
+  height: 9.94px;
+}
+
+.start-button__icon-rect {
+  /* Figma: Rectangle 3 - x: 2, y: 0, width: 4, height: 8 */
+  width: 4px;
+  height: 8px;
+  background: white; /* Figma: fill_GERYAX */
+  border-radius: 4px; /* Figma: borderRadius: 4px */
+  position: absolute;
+  left: 2px;
+  top: 0;
+}
+
+.start-button__icon-svg {
+  /* Figma: Ellipse 5 - x: 0, y: 5.94, width: 8, height: 4 */
+  width: 8px;
+  height: 4px;
+  position: absolute;
+  left: 0;
+  top: 5.94px;
+}
+
+/* Stop Button */
+.stop-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: #000000;
+  border-radius: 18px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.stop-button:hover {
+  background: #374151;
+}
+
+.stop-button__icon {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: white;
+  border-radius: 1px;
+}
+
+/* Drag Dots - ТОЧНО ПО FIGMA РАЗМЕРАМ */
+.drag-dots {
+  position: relative;
+  /* Figma: Frame 5 - width: 12, height: 12 */
+  width: 12px;
+  height: 12px;
+}
+
+.drag-dots__dot {
+  position: absolute;
+  /* Figma: Ellipse - width: 4, height: 4 */
+  width: 4px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.4); /* Figma: fill_VCRHZU */
+  border-radius: 50%;
+}
+
+/* Figma позиции точек */
+.drag-dots__dot:nth-child(1) {
+  /* Ellipse 1: x: 0, y: 0 */
+  top: 0;
+  left: 0;
+}
+
+.drag-dots__dot:nth-child(2) {
+  /* Ellipse 2: x: 8, y: 0 */
+  top: 0;
+  left: 8px;
+}
+
+.drag-dots__dot:nth-child(3) {
+  /* Ellipse 3: x: 0, y: 8 */
+  top: 8px;
+  left: 0;
+}
+
+.drag-dots__dot:nth-child(4) {
+  /* Ellipse 4: x: 8, y: 8 */
+  top: 8px;
+  left: 8px;
+}
+
+
+
+/* Recording Screen */
+.recording-screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+
+.recording-screen__header {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+/* Recording screen header controls */
+.recording-screen__header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+}
+
+.recording-screen__header-controls-old {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Content Panel */
+.content-panel {
+  flex: 1;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 537px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.content-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.content-section__title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #000000;
+}
+
+.content-section__content {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  max-height: 6rem;
+  overflow-y: auto;
+  color: #373737;
+}
+
+/* Transcript styles */
+.transcript-text {
+  margin-bottom: 0.5rem;
+}
+
+.transcript-text:last-child {
+  margin-bottom: 0;
+}
+
+.transcript-text--partial {
+  opacity: 0.7;
+  font-style: italic;
+  color: #6b7280;
+}
+
+.transcript-text--placeholder {
+  opacity: 0.5;
+  color: #9ca3af;
+}
+
+/* Insight styles */
+.insight-item {
+  margin-bottom: 0.25rem;
+}
+
+.insight-item:last-child {
+  margin-bottom: 0;
+}
+
+.insight-placeholder {
+  opacity: 0.5;
+  color: #9ca3af;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .content-panel {
+    max-width: 100%;
+    margin: 0 0.5rem;
+  }
+  
+  .recording-screen {
+    padding: 0.75rem;
+  }
+}
+
+/* Click-through indicator */
+.click-through-indicator {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(59, 130, 246, 0.8);
+  color: white;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+/* Animation for smooth transitions */
+.control-panel,
+.content-panel {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Анимации для кнопок и элементов панели */
+.animate-fade-in {
+  animation: fadeInButton 0.3s ease-in-out;
+}
+
+@keyframes fadeInButton {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.button-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wave-loader-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Wave Loader Animation */
+.wave-loader-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader {
+  --size: 2px; /* Уменьшаем размер столбцов */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: calc(var(--size) / 2);
+  height: calc(var(--size) * 5);
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+.loader.active {
+  opacity: 1;
+}
+
+.loader > div {
+  width: var(--size);
+  height: var(--size);
+  border-radius: 6px;
+  background: #fff;
+  animation: wave 0.9s infinite ease-in-out;
+  animation-direction: alternate;
+  will-change: height;
+}
+
+@keyframes wave {
+  0%   { height: var(--size); }
+  35%  { height: calc(var(--size) * 4.5); }
+  70%  { height: calc(var(--size) * 1.4); }
+  100% { height: calc(var(--size) * 5); }
+}
+
+.loader > div:nth-child(1) { animation-duration: .78s; animation-delay: 0s;   }
+.loader > div:nth-child(2) { animation-duration: .92s; animation-delay: .08s; }
+.loader > div:nth-child(3) { animation-duration: .84s; animation-delay: .16s; }
+.loader > div:nth-child(4) { animation-duration: 1.02s; animation-delay: .05s;}
+.loader > div:nth-child(5) { animation-duration: .86s; animation-delay: .12s; }

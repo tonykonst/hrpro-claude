@@ -1,0 +1,871 @@
+You are working inside the Interview Assistant project.
+
+Interview Assistant is an Electron-based desktop application for HR specialists that provides real-time interview transcription, AI-powered candidate analysis, and insights for decision-making. The system operates as a standalone desktop application without requiring external backend services.
+
+---
+
+## Project tasks
+
+1. Provide a live transcript of the interview.
+2. Analyze candidate answers using an LLM and the job knowledge base (Job Description, tech stack).
+3. Give HR short hints: strengths/weaknesses, risk areas, shallow answers, possible inconsistencies.
+4. Suggest clarifying follow-up questions to check the candidate’s knowledge depth.
+5. Save a final report (summary, strengths, risks, follow-ups, scores) in text format for HR.
+
+**Important:**
+
+* Do not directly accuse the candidate of using AI. Instead, note only indicators such as: "shallow," "generic," "no examples," "perfectly phrased but no details."
+* Answers must be short, structured, in JSON or Markdown format (depending on task).
+* Data is used only to help HR; the final decision remains with the human.
+* Style: neutral, professional, no marketing phrases.
+<!-- СТАРОЕ ПРАВИЛО - ЗАКОММЕНТИРОВАНО ДЛЯ ПУБЛИЧНОГО СЕРВИСА -->
+<!-- * Interviews average 1 hour. Latency must be low: insights every 2–4 seconds in small chunks. -->
+<!-- НОВОЕ ПРАВИЛО: Публичный сервис должен поддерживать сессии до 3+ часов -->
+* Публичный сервис должен поддерживать длительные сессии (до 3+ часов)
+* Адаптивная частота инсайтов: 2-4 секунды в начале, 5-10 секунд в длительных сессиях
+* Автоматическое управление памятью для предотвращения утечек
+
+**CRITICAL RULE - NO FAKE DATA:**
+
+* NEVER EVER USE DEMO DATA, SIMULATIONS, OR FAKE RESULTS!!!!!!!!!!!!!!!!!!!!
+* ALL testing must use REAL APIs, REAL audio processing, REAL transcription services!!!!!!!!!!!!!!!!!!!!
+* NO pre-written sample texts, NO simulated confidence scores, NO fake quality metrics!!!!!!!!!!!!!!!!!!!!
+* If testing transcription quality - use REAL Whisper API vs REAL Deepgram results!!!!!!!!!!!!!!!!!!!!
+* Users expect REAL functionality, not demonstrations or simulations!!!!!!!!!!!!!!!!!!!!
+* Any demo/simulation must be explicitly labeled as such and never presented as real results!!!!!!!!!!!!!!!!!!!!!
+
+---
+
+## Current Architecture (v0.51)
+
+**Desktop Application:** Electron + React/TypeScript
+
+* **Main Process:** Window management, IPC handlers, global shortcuts
+* **Renderer Process:** React UI with modular components
+* **Preload Script:** Secure API bridge between main and renderer
+* **Always-on-top, frameless, transparent windows** (macOS vibrancy / Windows layered)
+
+**Audio Processing:**
+
+* **AudioWorklet:** Real-time PCM processing (Float32 → Int16 conversion)
+* **AudioContext:** 16kHz sample rate, single channel
+* **Microphone capture:** getUserMedia with optimized constraints
+* **Real-time audio analysis:** Level monitoring and visualization
+
+**Speech Recognition:** Deepgram Streaming API
+
+* **Model:** nova-2-meeting (optimized for interview context)
+* **Settings:** Auto language detection, punctuation, smart formatting
+* **Partial results:** Every 100-250ms for real-time feedback
+* **Final results:** After 300-800ms silence (adaptive endpointing)
+* **Adaptive ASR:** Dynamic parameter optimization based on confidence
+
+**AI Analysis:** Claude Sonnet 4
+
+* **Model:** claude-sonnet-4-20250514
+* **Context window:** Last 15-40 seconds of transcript (adaptive)
+* **Output format:** JSON with topic, depth_score, signals, followups
+* **Rate limiting:** 3 requests/second with timeout protection
+
+**Post-Processing:** ASR Correction System
+
+* **Model:** claude-3-haiku-20240307 (fast correction)
+* **Triggers:** Low confidence, technical terms, mixed language
+* **Processing time:** <500ms timeout
+* **Fallback:** Original text on error
+
+**RAG System:** Context Enhancement
+
+* **Document processing:** Job descriptions, requirements, tech stack
+* **Embeddings:** Local vector storage for relevant context
+* **Context injection:** Enhanced prompts with relevant information
+
+**Data Storage:** Local File System
+
+* **Transcript logs:** Markdown files in `transcript-logs/` directory
+* **Session metadata:** JSON format with timestamps and confidence scores
+* **No external database:** All data stored locally for privacy
+
+---
+
+## Architecture Flow (Current Implementation)
+
+**Audio Pipeline:**
+Microphone → AudioWorklet (PCM processing) → Deepgram WebSocket → Real-time transcript
+
+**Analysis Pipeline:**
+Transcript segments → Claude AI analysis → RAG context enhancement → Insights generation
+
+**UI Synchronization:**
+Control Panel (recording) → IPC → Data Window (display) → Real-time updates
+
+**Data Flow:**
+1. **Audio Capture:** getUserMedia → AudioContext → AudioWorkletNode
+2. **Speech Recognition:** PCM data → Deepgram API → Partial/Final transcripts
+3. **AI Analysis:** Transcript → Claude API → Insights (strength/risk/question)
+4. **Post-Processing:** Low confidence segments → Correction system
+5. **UI Updates:** State changes → IPC → Window synchronization
+6. **Logging:** All events → Local markdown files
+
+**Window Management:**
+- **Control Panel:** Compact recording interface (200x56px)
+- **Data Window:** Full transcript and insights display (600x400px)
+- **IPC Communication:** Secure data transfer between windows
+- **Global Shortcuts:** Ctrl+\ for show/hide functionality
+
+---
+
+## Implementation Status (Current: v0.51)
+
+### ✅ Sprint 1: Core Desktop Application (COMPLETED)
+
+* **Electron Application:** Always-on-top, transparent, frameless windows
+* **Global Shortcuts:** Ctrl+\ for show/hide functionality
+* **Audio Capture:** getUserMedia with optimized constraints
+* **Deepgram Integration:** Real-time streaming transcription
+* **Basic UI:** Control panel and data window components
+
+### ✅ Sprint 2: Modular Architecture & AI Analysis (COMPLETED)
+
+* **Modular Components:** UI split into ui/, control/, data/ modules
+* **Modular Hooks:** useTranscription broken into specialized hooks
+* **Claude AI Integration:** Real-time analysis with context enhancement
+* **RAG System:** Document processing and context injection
+* **Post-Editor:** ASR correction for low-confidence segments
+* **IPC Communication:** Secure data synchronization between windows
+
+### ✅ Sprint 3: Advanced Features (COMPLETED)
+
+* **Adaptive ASR:** Dynamic parameter optimization
+* **Error Handling:** Comprehensive error management with fallbacks
+* **Security:** Context isolation, secure preload scripts
+* **Logging:** Local transcript storage in markdown format
+* **Performance:** AudioWorklet for real-time processing
+
+### 🔄 Sprint 4: Future Enhancements (PLANNED)
+
+* **Speaker Diarization:** Separate candidate vs interviewer speech
+* **Advanced Analytics:** Temporal signals, pace analysis
+* **Export Features:** PDF reports, data export
+* **Multi-language Support:** Enhanced language detection
+* **Performance Optimization:** Further latency improvements
+
+---
+
+## Prompts (Claude / LLM)
+
+**System (speech analysis):**
+
+* Classify topic
+* Score depth 0–1
+* Detect risks (generic, inconsistent, “perfect”)
+* Suggest 1–2 follow-up questions
+* Never accuse of cheating, only note indicators
+* Strict JSON output (<120 chars hints)
+
+**User (every tick):**
+
+* JD context
+* Last 15–40s transcript (adaptive)
+* Entities memory (last 20 terms)
+* History of topics/risks
+* Must return JSON with topic, depth\_score, signals, followups, note
+
+**Post-interview report:**
+
+* Markdown with Summary, Strengths, Risks (with timestamps), Follow-ups, Scores, Red flags.
+
+---
+
+## Event Schema (Current Implementation)
+
+**IPC Events:**
+* `transcript-update` — Real-time transcript data
+* `insights-update` — AI-generated insights
+* `recording-state-change` — Recording status updates
+* `window-created` — Window management events
+* `window-closed` — Window cleanup events
+
+**Transcript Events:**
+* `partial` — Interim transcript results
+* `final` — Confirmed transcript segments
+* `corrected` — Post-editor corrections
+
+**Analysis Events:**
+* `insight` — New AI insight (strength/risk/question)
+* `topic-change` — Subject matter transitions
+* `confidence-update` — ASR confidence metrics
+
+**System Events:**
+* `error` — Error notifications
+* `warning` — System warnings
+* `info` — Status messages
+
+---
+
+## Electron Implementation Details
+
+**Window Configuration:**
+* **Transparent windows:** macOS vibrancy, Windows layered transparency
+* **Always-on-top:** Stays above video call applications
+* **Frameless design:** Custom UI without system chrome
+* **Click-through:** Optional click-through mode for overlay behavior
+* **Global shortcuts:** Ctrl+\ for show/hide functionality
+
+**Security Features:**
+* **Context isolation:** `contextIsolation: true`
+* **No node integration:** `nodeIntegration: false`
+* **Web security:** `webSecurity: true`
+* **Preload scripts:** Secure API bridge between processes
+* **API key protection:** Environment variables via preload
+
+**Performance Optimizations:**
+* **Background throttling disabled:** `backgroundThrottling: false`
+* **AudioWorklet processing:** Real-time audio without main thread blocking
+* **IPC optimization:** Efficient data transfer between windows
+* **Memory management:** Proper cleanup of audio contexts and streams
+
+---
+
+## Latency & cost
+
+* Target: streaming <900 ms total latency (p95)
+* Costs: \~\$0.18–1.20/hr for ASR + a few cents for LLM
+
+---
+
+## Security
+
+<!-- СТАРОЕ ПРАВИЛО - ЗАКОММЕНТИРОВАНО ДЛЯ ПУБЛИЧНОГО СЕРВИСА -->
+<!-- * Store only text + aggregates -->
+<!-- * Mask PII -->
+<!-- * Tokenized report links -->
+<!-- НОВОЕ ПРАВИЛО: Расширенное хранение для публичного сервиса -->
+* Хранить текст, агрегаты, метаданные сессий, метрики производительности
+* Автоматическая ротация логов и очистка старых данных
+* Архивирование важных сессий с возможностью восстановления
+* Маскировать PII в логах и отчетах
+* Шифрование чувствительных данных при необходимости
+
+---
+
+## Roadmap upgrades
+
+* Speaker diarization
+* Temporal signals (delays, pace)
+* Anti-spoof heuristics
+* Zoom App version
+* PDF export (Pro)
+
+---
+
+## Modular Architecture (v0.51 Refactoring)
+
+**Component Structure:**
+```
+src/components/
+├── ui/                    # Reusable UI components
+│   ├── Button.tsx         # Generic button component
+│   ├── Panel.tsx          # Container components
+│   ├── Transcript.tsx     # Transcript display
+│   └── Insights.tsx       # Insights display
+├── control/               # Control panel components
+│   ├── ControlPanel.tsx   # Main control interface
+│   ├── StartButton.tsx    # Recording start button
+│   ├── StopButton.tsx     # Recording stop button
+│   └── DragZone.tsx       # Window drag area
+├── data/                  # Data window components
+│   ├── DataWindow.tsx     # Main data display
+│   ├── TranscriptSection.tsx
+│   └── InsightsSection.tsx
+└── common/                # Shared components
+    └── WaveLoader.tsx     # Audio visualization
+```
+
+**Hook Architecture:**
+```
+src/hooks/transcription/
+├── index.ts                    # Main export
+├── useTranscription.ts         # Simplified main hook
+├── useTranscriptionCore.ts     # Core state management
+├── useTranscriptionCallbacks.ts # Event handlers
+├── useTranscriptionState.ts    # State management
+├── useTranscriptionServices.ts # Service integration
+└── useTranscriptionRecording.ts # Recording logic
+```
+
+**Service Interfaces:**
+* **ITranscriptionService:** Deepgram integration contract
+* **IAnalysisService:** Claude AI analysis contract
+* **IConfigService:** Configuration management contract
+* **IErrorHandler:** Error management contract
+
+---
+
+## Architecture Principles (Current Implementation)
+
+**Modular Design:**
+* **Component separation:** ui/, control/, data/ modules
+* **Hook specialization:** useTranscriptionCore, useTranscriptionCallbacks, etc.
+* **Service interfaces:** ITranscriptionService, IAnalysisService, IConfigService
+* **Loose coupling:** Event-driven communication between modules
+
+**Type Safety:**
+* **Strict TypeScript:** Comprehensive type definitions
+* **Interface contracts:** Well-defined API boundaries
+* **Error handling:** AppError class with structured error management
+* **Runtime validation:** Input validation and type checking
+
+**Performance:**
+* **Real-time processing:** AudioWorklet for non-blocking audio
+* **Adaptive algorithms:** Dynamic ASR parameter optimization
+* **Rate limiting:** API call throttling and timeout protection
+* **Memory efficiency:** Proper resource cleanup and garbage collection
+
+**Security:**
+* **Process isolation:** Electron security best practices
+* **API key protection:** Secure environment variable handling
+* **Local storage:** No external data transmission
+* **Input sanitization:** Safe handling of user data
+
+---
+
+## Testing pyramid
+
+* Unit, contract, integration, e2e
+* API facades with mocks
+* Performance budgets enforced
+* Security scans in CI
+
+---
+
+## Error Handling (Current Implementation)
+
+**Error Management:**
+* **AppError class:** Structured error handling with context
+* **ErrorHandler utility:** Centralized error processing and retry logic
+* **Fallback mechanisms:** Graceful degradation on service failures
+* **Logging:** Comprehensive error logging with stack traces
+
+**Recovery Strategies:**
+* **API failures:** Automatic retry with exponential backoff
+* **Audio issues:** Fallback to basic recording mode
+* **Network problems:** Offline mode with local processing
+* **Memory issues:** Automatic cleanup and resource management
+
+**User Experience:**
+* **Non-blocking errors:** UI remains responsive during failures
+* **Error notifications:** Clear user feedback on issues
+* **Recovery options:** Manual retry and reset functionality
+* **Graceful shutdown:** Proper cleanup on application exit
+
+---
+
+## Compliance
+
+* GDPR/DPIA
+* SOC2/ISO later
+
+---
+
+## Documentation Status (v0.51)
+
+**Current Documentation:**
+* **Complete system documentation:** DOCS/DOCUMENTATION.md (2,349 lines)
+* **Modular architecture guide:** Detailed component and hook documentation
+* **API documentation:** Service interfaces and type definitions
+* **Security guidelines:** Electron security best practices
+* **Performance optimization:** AudioWorklet and ASR tuning guides
+
+**Developer Resources:**
+* **Setup instructions:** Environment configuration and dependencies
+* **Architecture overview:** System flow and component relationships
+* **Code examples:** Real implementation snippets with explanations
+* **Troubleshooting:** Common issues and solutions
+* **Extension guide:** How to add new features and modules
+
+**Maintenance:**
+* **Version tracking:** Current v0.51 with change history
+* **Update procedures:** How to sync documentation with code changes
+* **Code comments:** Inline documentation explaining design decisions
+* **README files:** Module-specific setup and usage instructions
+
+---
+
+This document captures the Interview Assistant project v0.51 with current architecture, implementation status, and detailed technical specifications. The system is a fully functional Electron desktop application with modular architecture, real-time AI analysis, and comprehensive error handling.
+
+---
+
+## 🏗️ **АРХИТЕКТУРНЫЕ ПРИНЦИПЫ И СТАНДАРТЫ**
+
+### **1. Модульная архитектура (ОБЯЗАТЕЛЬНО)**
+
+**Принципы разделения:**
+* **ui/** - Переиспользуемые UI компоненты (Button, Panel, Transcript, Insights)
+* **control/** - Компоненты панели управления (ControlPanel, StartButton, StopButton, DragZone)
+* **data/** - Компоненты окна данных (DataWindow, TranscriptSection, InsightsSection)
+* **common/** - Общие компоненты (WaveLoader, RecordingIndicator)
+* **services/** - Бизнес-логика и интеграции с внешними API
+* **hooks/** - Специализированные хуки для управления состоянием
+
+**Правила модульности:**
+* ✅ Каждый модуль должен иметь четкую ответственность
+* ✅ Модули не должны зависеть друг от друга напрямую
+* ✅ Общение между модулями только через события и интерфейсы
+* ✅ Каждый модуль должен иметь index.ts для экспорта
+* ❌ НЕ создавать циклические зависимости между модулями
+
+### **2. Строгая типизация (ОБЯЗАТЕЛЬНО)**
+
+**Интерфейсы сервисов:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Все сервисы должны реализовывать интерфейсы
+export interface ITranscriptionService {
+  connect(): Promise<void>;
+  disconnect(): void;
+  sendAudio(audioData: ArrayBuffer): void;
+  onTranscript(callback: (event: TranscriptEvent) => void): void;
+  onError(callback: (error: string) => void): void;
+}
+
+export interface IAnalysisService {
+  analyzeTranscript(request: AnalysisRequest): Promise<InsightResponse>;
+  isConfigured(): boolean;
+}
+
+export interface IConfigService {
+  getConfig(): AppConfig;
+  isServiceConfigured(service: string): boolean;
+}
+```
+
+**Правила типизации:**
+* ✅ Все публичные методы должны иметь строгие типы
+* ✅ Использовать generic типы для переиспользуемых компонентов
+* ✅ Создавать отдельные типы для API запросов/ответов
+* ✅ Использовать union types для ограниченных значений
+* ❌ НЕ использовать `any` без крайней необходимости
+* ❌ НЕ использовать `@ts-ignore` без комментария с объяснением
+
+### **3. Обработка ошибок (ОБЯЗАТЕЛЬНО)**
+
+**Структурированные ошибки:**
+```typescript
+export class AppError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public retriable: boolean = false,
+    public context?: Record<string, any>
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+// ОБЯЗАТЕЛЬНО: Все async операции должны обрабатывать ошибки
+export class ErrorHandler {
+  static async withRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    delay: number = 1000
+  ): Promise<T> {
+    // Implementation with exponential backoff
+  }
+}
+```
+
+**Правила обработки ошибок:**
+* ✅ Все async функции должны иметь try/catch блоки
+* ✅ Использовать AppError для структурированных ошибок
+* ✅ Логировать ошибки с контекстом
+* ✅ Предоставлять fallback механизмы
+* ✅ Не блокировать UI при ошибках сервисов
+* ❌ НЕ игнорировать ошибки (catch без обработки)
+
+---
+
+## 🔒 **СТАНДАРТЫ БЕЗОПАСНОСТИ**
+
+### **1. Electron Security (КРИТИЧНО)**
+
+**Обязательные настройки:**
+```typescript
+webPreferences: {
+  nodeIntegration: false,        // ✅ ОБЯЗАТЕЛЬНО
+  contextIsolation: true,        // ✅ ОБЯЗАТЕЛЬНО
+  webSecurity: true,             // ✅ ОБЯЗАТЕЛЬНО
+  backgroundThrottling: false,   // Для стабильности
+  enableRemoteModule: false,     // ✅ ОБЯЗАТЕЛЬНО
+  preload: path.join(__dirname, '..', 'preload', 'preload.js')
+}
+```
+
+**Preload Script Security:**
+```typescript
+// ✅ БЕЗОПАСНО: Только через contextBridge
+contextBridge.exposeInMainWorld('electronAPI', {
+  getConfig: () => Promise.resolve({
+    env: {
+      DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY || '',
+      CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
+    }
+  })
+});
+
+// ❌ НЕБЕЗОПАСНО: Прямая передача API ключей
+// contextBridge.exposeInMainWorld('apiKeys', process.env);
+```
+
+### **2. API Key Protection (КРИТИЧНО)**
+
+**Правила работы с API ключами:**
+* ✅ API ключи ТОЛЬКО через environment variables
+* ✅ Передача через preload script с contextBridge
+* ✅ НЕ включать API ключи в bundle
+* ✅ Валидация ключей при инициализации
+* ✅ Fallback в mock режим при отсутствии ключей
+* ❌ НЕ хардкодить API ключи в коде
+* ❌ НЕ логировать API ключи в консоль
+
+### **3. Data Privacy (КРИТИЧНО)**
+
+**Обработка персональных данных:**
+* ✅ Все данные хранятся локально (файловая система)
+* ✅ НЕ передавать аудио данные на внешние серверы (кроме Deepgram)
+* ✅ Маскировать PII в логах
+* ✅ Автоматическое удаление временных файлов
+* ✅ Шифрование чувствительных данных при необходимости
+* ❌ НЕ сохранять аудио файлы на диск
+* ❌ НЕ передавать транскрипты на внешние сервисы (кроме Claude)
+
+---
+
+## ⚡ **ПРОИЗВОДИТЕЛЬНОСТЬ И МАСШТАБИРУЕМОСТЬ**
+
+### **1. Long-Running Sessions (КРИТИЧНО для публичного сервиса)**
+
+**Управление памятью:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Ограничение размера буферов
+export class MemoryManager {
+  private static readonly MAX_TRANSCRIPT_WORDS = 1000;
+  private static readonly MAX_INSIGHTS_HISTORY = 50;
+  private static readonly MAX_AUDIO_BUFFER_SIZE = 1024 * 1024; // 1MB
+  
+  static cleanupOldData(transcript: string[], insights: Insight[]): void {
+    // Удаление старых данных для предотвращения утечек памяти
+  }
+}
+```
+
+**Правила для длительных сессий:**
+* ✅ Ограничивать размер буферов транскриптов (максимум 1000 слов)
+* ✅ Ограничивать историю инсайтов (максимум 50 записей)
+* ✅ Периодическая очистка неиспользуемых данных
+* ✅ Мониторинг использования памяти
+* ✅ Graceful degradation при нехватке ресурсов
+* ❌ НЕ накапливать неограниченные объемы данных
+
+### **2. Real-time Performance (КРИТИЧНО)**
+
+**AudioWorklet Optimization:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Неблокирующая обработка аудио
+class PCMProcessor extends AudioWorkletProcessor {
+  process(inputs, outputs, parameters) {
+    // Быстрая конвертация Float32 → Int16
+    // Минимальная обработка в worklet
+    return true;
+  }
+}
+```
+
+**Правила производительности:**
+* ✅ Использовать AudioWorklet для обработки аудио
+* ✅ Rate limiting для API вызовов (максимум 3 запроса/сек)
+* ✅ Timeout для всех async операций (максимум 500ms)
+* ✅ Экспоненциальное сглаживание метрик
+* ✅ Lazy loading компонентов
+* ❌ НЕ блокировать main thread длительными операциями
+* ❌ НЕ делать синхронные API вызовы
+
+### **3. Adaptive Systems (ОБЯЗАТЕЛЬНО)**
+
+**Адаптивная система ASR:**
+```typescript
+export class AdaptiveASRManager {
+  // ОБЯЗАТЕЛЬНО: Динамическая оптимизация параметров
+  getAdaptiveParameters(): {
+    endpointing: number,
+    interim_results_period: number,
+    confidence_threshold: number
+  } {
+    // Адаптация на основе качества распознавания
+  }
+}
+```
+
+**Правила адаптивности:**
+* ✅ Динамическая оптимизация параметров ASR
+* ✅ Адаптация к качеству аудио
+* ✅ Автоматическое переключение моделей при необходимости
+* ✅ Мониторинг метрик производительности
+* ✅ Fallback на более простые алгоритмы при проблемах
+* ❌ НЕ использовать фиксированные параметры для всех сценариев
+
+---
+
+## 🧪 **ТЕСТИРОВАНИЕ И КАЧЕСТВО КОДА**
+
+### **1. Testing Pyramid (ОБЯЗАТЕЛЬНО)**
+
+**Структура тестов:**
+* **Unit Tests** - Тестирование отдельных функций и компонентов
+* **Integration Tests** - Тестирование взаимодействия между модулями
+* **E2E Tests** - Тестирование полных пользовательских сценариев
+* **Performance Tests** - Тестирование производительности и памяти
+
+**Правила тестирования:**
+* ✅ Покрытие тестами минимум 80% кода
+* ✅ Тестирование всех публичных API
+* ✅ Mock внешних сервисов в unit тестах
+* ✅ Тестирование error handling
+* ✅ Performance budgets для критических операций
+* ❌ НЕ тестировать implementation details
+* ❌ НЕ создавать тесты без assertions
+
+### **2. Code Quality Standards (ОБЯЗАТЕЛЬНО)**
+
+**ESLint Configuration:**
+```json
+{
+  "extends": [
+    "@typescript-eslint/recommended",
+    "react-hooks/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": "error",
+    "react-hooks/exhaustive-deps": "error"
+  }
+}
+```
+
+**Правила качества кода:**
+* ✅ Использовать TypeScript strict mode
+* ✅ Следовать ESLint правилам
+* ✅ Использовать Prettier для форматирования
+* ✅ Комментировать сложную бизнес-логику
+* ✅ Использовать meaningful имена переменных и функций
+* ❌ НЕ использовать console.log в production коде
+* ❌ НЕ создавать функции длиннее 50 строк
+
+---
+
+## 📊 **МОНИТОРИНГ И ЛОГИРОВАНИЕ**
+
+### **1. Structured Logging (ОБЯЗАТЕЛЬНО)**
+
+**Формат логов:**
+```typescript
+interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  service: string;
+  message: string;
+  context?: Record<string, any>;
+  sessionId?: string;
+}
+
+// ОБЯЗАТЕЛЬНО: Структурированное логирование
+export class Logger {
+  static log(level: LogLevel, message: string, context?: any): void {
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      service: this.getServiceName(),
+      message,
+      context: this.sanitizeContext(context)
+    };
+    
+    console.log(JSON.stringify(entry));
+  }
+}
+```
+
+**Правила логирования:**
+* ✅ Использовать структурированные JSON логи
+* ✅ Включать timestamp и session ID
+* ✅ Логировать все ошибки с контекстом
+* ✅ Маскировать чувствительные данные
+* ✅ Разные уровни логирования (debug, info, warn, error)
+* ❌ НЕ логировать API ключи или пароли
+* ❌ НЕ использовать console.log для production логирования
+
+### **2. Performance Monitoring (ОБЯЗАТЕЛЬНО)**
+
+**Метрики для мониторинга:**
+```typescript
+interface PerformanceMetrics {
+  audioLatency: number;        // Задержка обработки аудио
+  transcriptionLatency: number; // Задержка транскрипции
+  analysisLatency: number;     // Задержка анализа
+  memoryUsage: number;         // Использование памяти
+  errorRate: number;           // Частота ошибок
+  sessionDuration: number;     // Длительность сессии
+}
+```
+
+**Правила мониторинга:**
+* ✅ Мониторить критические метрики производительности
+* ✅ Алерты при превышении лимитов
+* ✅ Сбор метрик в реальном времени
+* ✅ Анализ трендов производительности
+* ✅ Автоматическое масштабирование при необходимости
+* ❌ НЕ собирать метрики без цели
+* ❌ НЕ игнорировать предупреждения о производительности
+
+---
+
+## 🚀 **DEPLOYMENT И CI/CD**
+
+### **1. Build Process (ОБЯЗАТЕЛЬНО)**
+
+**Структура сборки:**
+```json
+{
+  "scripts": {
+    "build": "npm run build:vite && npm run build:electron",
+    "build:vite": "vite build",
+    "build:electron": "tsc -p tsconfig.main.json",
+    "test": "jest",
+    "test:e2e": "playwright test",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  }
+}
+```
+
+**Правила сборки:**
+* ✅ Автоматическая проверка типов TypeScript
+* ✅ Линтинг кода перед сборкой
+* ✅ Запуск тестов перед деплоем
+* ✅ Минификация для production
+* ✅ Source maps для debugging
+* ❌ НЕ деплоить код с ошибками линтера
+* ❌ НЕ деплоить код с failing тестами
+
+### **2. Environment Management (ОБЯЗАТЕЛЬНО)**
+
+**Конфигурация окружений:**
+```typescript
+// ОБЯЗАТЕЛЬНО: Разделение конфигураций по окружениям
+export const getEnvironmentConfig = (env: string) => {
+  switch (env) {
+    case 'development':
+      return { debug: true, mockApis: true };
+    case 'staging':
+      return { debug: false, mockApis: false, rateLimit: 1 };
+    case 'production':
+      return { debug: false, mockApis: false, rateLimit: 3 };
+    default:
+      throw new Error(`Unknown environment: ${env}`);
+  }
+};
+```
+
+**Правила окружений:**
+* ✅ Разделение конфигураций по окружениям
+* ✅ Валидация конфигурации при запуске
+* ✅ Fallback значения для всех настроек
+* ✅ Безопасное хранение секретов
+* ✅ Автоматическое переключение между окружениями
+* ❌ НЕ использовать production конфигурацию в development
+* ❌ НЕ хардкодить environment-specific значения
+
+---
+
+## 📋 **COMPLIANCE И ПРАВОВЫЕ ТРЕБОВАНИЯ**
+
+### **1. GDPR Compliance (КРИТИЧНО для публичного сервиса)**
+
+**Обработка персональных данных:**
+* ✅ Минимизация сбора данных (только необходимые)
+* ✅ Локальное хранение всех данных
+* ✅ Автоматическое удаление после сессии
+* ✅ Право на удаление данных
+* ✅ Прозрачность обработки данных
+* ✅ Согласие пользователя на обработку
+* ❌ НЕ передавать данные третьим лицам без согласия
+* ❌ НЕ хранить данные дольше необходимого
+
+### **2. Security Audits (ОБЯЗАТЕЛЬНО)**
+
+**Регулярные проверки:**
+* ✅ Автоматическое сканирование уязвимостей
+* ✅ Аудит зависимостей (npm audit)
+* ✅ Проверка API ключей на утечки
+* ✅ Тестирование на проникновение
+* ✅ Анализ кода на уязвимости
+* ✅ Мониторинг подозрительной активности
+* ❌ НЕ игнорировать security warnings
+* ❌ НЕ использовать устаревшие зависимости
+
+---
+
+## ⚠️ **ВАЖНЫЕ ПРЕДУПРЕЖДЕНИЯ**
+
+### **1. Противоречия с существующими правилами**
+
+**ЗАКОММЕНТИРОВАННЫЕ СТАРЫЕ ПРАВИЛА:**
+* Старые правила закомментированы в соответствующих разделах выше
+* Все изменения отмечены комментариями с объяснением причин
+* Новые правила адаптированы для публичного сервиса с длительными сессиями
+
+### **2. Критические изменения для публичного сервиса**
+
+**Масштабируемость:**
+* ✅ Поддержка множественных одновременных сессий
+* ✅ Автоматическое управление ресурсами
+* ✅ Graceful degradation при высокой нагрузке
+* ✅ Мониторинг и алертинг
+
+**Надежность:**
+* ✅ Автоматическое восстановление после сбоев
+* ✅ Backup и recovery механизмы
+* ✅ Health checks и monitoring
+* ✅ Circuit breaker pattern для внешних API
+
+**Безопасность:**
+* ✅ Аутентификация и авторизация пользователей
+* ✅ Шифрование данных в покое и в передаче
+* ✅ Аудит доступа и действий пользователей
+* ✅ Защита от DDoS и других атак
+
+---
+
+## 📚 **ДОПОЛНИТЕЛЬНЫЕ РЕСУРСЫ**
+
+### **1. Документация**
+* **Полная документация:** DOCS/DOCUMENTATION.md (2,349 строк)
+* **Архитектурные решения:** DOCS/ARCHITECTURE.md
+* **API документация:** DOCS/API.md
+* **Security guidelines:** DOCS/SECURITY.md
+
+### **2. Инструменты разработки**
+* **TypeScript:** Строгая типизация
+* **ESLint:** Линтинг кода
+* **Prettier:** Форматирование
+* **Jest:** Unit тестирование
+* **Playwright:** E2E тестирование
+
+### **3. Мониторинг**
+* **Performance metrics:** Real-time мониторинг
+* **Error tracking:** Автоматическое отслеживание ошибок
+* **Usage analytics:** Анализ использования
+* **Security monitoring:** Мониторинг безопасности
+
+---
+
+**ВАЖНО:** Этот документ содержит критические правила для публичного сервиса. Все разработчики ОБЯЗАНЫ следовать этим стандартам. Нарушение правил безопасности или производительности может привести к серьезным проблемам в production среде.

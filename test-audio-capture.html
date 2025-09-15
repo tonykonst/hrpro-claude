@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Browser Audio Capture (No Microphone)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 10px 10px 0;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            background: #f8f9fa;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        audio {
+            width: 100%;
+            margin-top: 20px;
+        }
+        .audio-visualizer {
+            height: 100px;
+            background: #f0f0f0;
+            border-radius: 6px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .audio-bar {
+            width: 4px;
+            background: #007bff;
+            margin: 0 2px;
+            transition: height 0.1s;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .instructions {
+            background: #e8f4fd;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .browser-info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎧 Browser Audio Capture Test</h1>
+        <div class="subtitle">Capture ONLY incoming audio (no microphone)</div>
+
+        <div class="instructions">
+            <strong>📋 Instructions:</strong>
+            <ol>
+                <li>Open a YouTube video or any audio source in another tab</li>
+                <li>Click "Start Audio Capture" button below</li>
+                <li>Select the tab with audio playing</li>
+                <li><strong>IMPORTANT:</strong> Check "Share tab audio" checkbox in the dialog</li>
+                <li>Click "Share" to start capturing</li>
+            </ol>
+        </div>
+
+        <div class="browser-info" id="browserInfo"></div>
+
+        <div style="margin-top: 30px;">
+            <button id="startCapture">🎤 Start Audio Capture</button>
+            <button id="stopCapture" disabled>⏹️ Stop Capture</button>
+            <button id="testAudio">🔊 Play Test Sound</button>
+        </div>
+
+        <div id="status" class="status">Ready to capture audio</div>
+
+        <div class="audio-visualizer" id="visualizer" style="display: none;">
+            <div id="bars"></div>
+        </div>
+
+        <audio id="audioElement" controls style="display: none;"></audio>
+
+        <div style="margin-top: 30px;">
+            <h3>📊 Capture Details:</h3>
+            <div id="captureDetails" style="font-family: monospace; background: #f4f4f4; padding: 10px; border-radius: 6px;">
+                No active capture
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Browser detection
+        function detectBrowser() {
+            const userAgent = navigator.userAgent.toLowerCase();
+            const vendor = navigator.vendor?.toLowerCase() || '';
+
+            let name = 'unknown';
+            let version = '';
+
+            if (userAgent.includes('chrome') && vendor.includes('google')) {
+                name = 'Chrome';
+                const match = userAgent.match(/chrome\/(\d+\.\d+)/);
+                version = match ? match[1] : '';
+            } else if (userAgent.includes('edg/')) {
+                name = 'Edge';
+                const match = userAgent.match(/edg\/(\d+\.\d+)/);
+                version = match ? match[1] : '';
+            } else if (userAgent.includes('safari') && vendor.includes('apple')) {
+                name = 'Safari';
+                const match = userAgent.match(/version\/(\d+\.\d+)/);
+                version = match ? match[1] : '';
+            } else if (userAgent.includes('firefox')) {
+                name = 'Firefox';
+                const match = userAgent.match(/firefox\/(\d+\.\d+)/);
+                version = match ? match[1] : '';
+            }
+
+            return { name, version, userAgent };
+        }
+
+        // Update browser info
+        const browserInfo = detectBrowser();
+        document.getElementById('browserInfo').innerHTML = `
+            <strong>Browser:</strong> ${browserInfo.name} ${browserInfo.version}<br>
+            <strong>Audio Capture Support:</strong> ${
+                browserInfo.name === 'Chrome' || browserInfo.name === 'Edge' ?
+                '✅ Full support (tab audio)' :
+                browserInfo.name === 'Safari' ?
+                '⚠️ Limited (screen + audio)' :
+                '❌ No audio capture support'
+            }
+        `;
+
+        let stream = null;
+        let audioContext = null;
+        let analyser = null;
+        let animationId = null;
+
+        const startButton = document.getElementById('startCapture');
+        const stopButton = document.getElementById('stopCapture');
+        const testButton = document.getElementById('testAudio');
+        const statusDiv = document.getElementById('status');
+        const audioElement = document.getElementById('audioElement');
+        const visualizer = document.getElementById('visualizer');
+        const detailsDiv = document.getElementById('captureDetails');
+
+        // Test audio playback
+        testButton.addEventListener('click', () => {
+            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE');
+            audio.play();
+            updateStatus('Playing test sound...', 'info');
+        });
+
+        // Start capture
+        startButton.addEventListener('click', async () => {
+            try {
+                updateStatus('Requesting audio capture...', 'info');
+
+                // Правильные настройки для захвата аудио БЕЗ микрофона
+                const displayMediaOptions = {
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        suppressLocalAudioPlayback: false
+                    },
+                    video: {
+                        displaySurface: 'browser'
+                    }
+                };
+
+                // Добавляем Chrome-специфичные опции
+                if (browserInfo.name === 'Chrome' || browserInfo.name === 'Edge') {
+                    displayMediaOptions.systemAudio = 'include';
+                    displayMediaOptions.preferCurrentTab = false;
+                }
+
+                console.log('Requesting getDisplayMedia with options:', displayMediaOptions);
+                stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+
+                // Проверяем наличие аудио трека
+                const audioTracks = stream.getAudioTracks();
+                const videoTracks = stream.getVideoTracks();
+
+                console.log('Audio tracks:', audioTracks.length);
+                console.log('Video tracks:', videoTracks.length);
+
+                if (audioTracks.length === 0) {
+                    updateStatus('⚠️ No audio captured! Make sure to check "Share tab audio" option', 'warning');
+                } else {
+                    updateStatus('✅ Audio capture started successfully!', 'success');
+
+                    // Показываем детали
+                    detailsDiv.innerHTML = `
+                        <strong>Audio Track:</strong> ${audioTracks[0].label}<br>
+                        <strong>Audio Settings:</strong> ${JSON.stringify(audioTracks[0].getSettings(), null, 2)}<br>
+                        <strong>Video Track:</strong> ${videoTracks.length > 0 ? videoTracks[0].label : 'None'}<br>
+                        <strong>Stream ID:</strong> ${stream.id}
+                    `;
+
+                    // Удаляем видео трек, оставляем только аудио
+                    videoTracks.forEach(track => {
+                        track.stop();
+                        stream.removeTrack(track);
+                    });
+
+                    // Подключаем аудио к элементу для прослушивания
+                    audioElement.srcObject = stream;
+                    audioElement.style.display = 'block';
+
+                    // Настраиваем визуализацию
+                    setupAudioVisualization(stream);
+                }
+
+                startButton.disabled = true;
+                stopButton.disabled = false;
+
+                // Обработка завершения захвата
+                stream.getTracks().forEach(track => {
+                    track.addEventListener('ended', () => {
+                        stopCapture();
+                        updateStatus('Capture ended by user', 'info');
+                    });
+                });
+
+            } catch (error) {
+                console.error('Capture error:', error);
+                updateStatus(`Error: ${error.message}`, 'error');
+
+                if (error.name === 'NotAllowedError') {
+                    updateStatus('Permission denied. Please allow screen capture.', 'error');
+                } else if (error.name === 'NotFoundError') {
+                    updateStatus('No audio sources found.', 'error');
+                }
+            }
+        });
+
+        // Stop capture
+        stopButton.addEventListener('click', stopCapture);
+
+        function stopCapture() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+
+            audioElement.srcObject = null;
+            audioElement.style.display = 'none';
+            visualizer.style.display = 'none';
+
+            startButton.disabled = false;
+            stopButton.disabled = true;
+
+            detailsDiv.innerHTML = 'No active capture';
+            updateStatus('Capture stopped', 'info');
+        }
+
+        // Audio visualization
+        function setupAudioVisualization(stream) {
+            audioContext = new AudioContext();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            visualizer.style.display = 'flex';
+            const barsContainer = document.getElementById('bars');
+            barsContainer.innerHTML = '';
+
+            // Create bars
+            for (let i = 0; i < 32; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'audio-bar';
+                barsContainer.appendChild(bar);
+            }
+
+            const bars = barsContainer.getElementsByClassName('audio-bar');
+
+            function draw() {
+                animationId = requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+
+                for (let i = 0; i < bars.length; i++) {
+                    const value = dataArray[i * 4];
+                    const height = (value / 255) * 100;
+                    bars[i].style.height = height + '%';
+                }
+            }
+
+            draw();
+        }
+
+        function updateStatus(message, type = '') {
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            console.log(`[Status] ${message}`);
+        }
+
+        // Check for getDisplayMedia support
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            updateStatus('❌ Your browser does not support screen capture API', 'error');
+            startButton.disabled = true;
+        }
+    </script>
+</body>
+</html>
