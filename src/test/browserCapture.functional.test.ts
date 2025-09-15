@@ -64,7 +64,7 @@ describe('Browser Capture Functional Tests', () => {
       expect(flags.ENABLE_BROWSER_CAPTURE).toBe(true);
       expect(flags.ENABLE_CHROME_EXTENSION).toBe(true);
       expect(flags.ENABLE_SAFARI_CAPTURE).toBe(true);
-      expect(flags.ENABLE_FIREFOX_CAPTURE).toBe(true);
+      expect(flags.ENABLE_FIREFOX_CAPTURE).toBe(false);
     });
 
     it('should allow runtime flag modifications', () => {

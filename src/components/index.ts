@@ -7,6 +7,7 @@
 // Legacy components (to be refactored)
 export { StartScreen } from './StartScreen';
 export { RecordingScreen } from './RecordingScreen';
+export { AudioCaptureInstructions } from './AudioCaptureInstructions';
 
 // UI Components
 export * from './ui';

@@ -79,7 +79,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   // └─────────────────────────────────────────────────────────────────────┘
   ENABLE_CHROME_EXTENSION: true,     // Chrome/Edge extension support
   ENABLE_SAFARI_CAPTURE: true,       // Safari screen capture
-  ENABLE_FIREFOX_CAPTURE: true,      // Firefox support
+  ENABLE_FIREFOX_CAPTURE: false,      // Firefox support (disabled by default)
   
   // ┌─────────────────────────────────────────────────────────────────────┐
   // │ UI FEATURES - Comment out to hide UI elements                      │

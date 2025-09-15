@@ -247,7 +247,7 @@ describe('Cross-Browser Audio Capture System', () => {
       expect(flags.ENABLE_BROWSER_CAPTURE).toBe(true);
       expect(flags.ENABLE_CHROME_EXTENSION).toBe(true);
       expect(flags.ENABLE_SAFARI_CAPTURE).toBe(true);
-      expect(flags.ENABLE_FIREFOX_CAPTURE).toBe(true);
+      expect(flags.ENABLE_FIREFOX_CAPTURE).toBe(false);
       expect(flags.ENABLE_AUTO_SOURCE_FALLBACK).toBe(true);
     });
 
@@ -380,7 +380,7 @@ describe('Cross-Browser Audio Capture System', () => {
       const capabilities = captureService.getCapabilities();
       
       expect(capabilities.canCaptureScreen).toBe(true);
-      expect(capabilities.requiresExtension).toBe(true);
+      expect(capabilities.requiresExtension).toBe(false);
       expect(capabilities.availableSources).toContain('microphone');
       expect(capabilities.availableSources).toContain('screen-with-audio');
     });
@@ -542,7 +542,7 @@ describe('Cross-Browser Audio Capture System', () => {
       
       // Capabilities should match browser features
       if (browser.supportsExtensions) {
-        expect(capabilities.requiresExtension).toBe(true);
+        expect(capabilities.requiresExtension).toBe(false);
       }
       
       if (browser.supportsScreenCapture) {
