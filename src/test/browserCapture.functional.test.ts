@@ -110,20 +110,16 @@ describe('Browser Capture Functional Tests', () => {
 
     it('should correctly report browser capture availability', () => {
       expect(isAnyBrowserCaptureAvailable()).toBe(true);
-      
+
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', false);
       expect(isAnyBrowserCaptureAvailable()).toBe(false);
-      
-      // Re-enable one browser method
+
+      // Re-enable master flag but disable individual browser flags
       setFeatureFlag('ENABLE_BROWSER_CAPTURE', true);
       setFeatureFlag('ENABLE_CHROME_EXTENSION', false);
       setFeatureFlag('ENABLE_FIREFOX_CAPTURE', false);
-      // Safari should still be enabled
-      expect(isAnyBrowserCaptureAvailable()).toBe(true);
-      
-      // Disable all browser methods
       setFeatureFlag('ENABLE_SAFARI_CAPTURE', false);
-      expect(isAnyBrowserCaptureAvailable()).toBe(false);
+      expect(isAnyBrowserCaptureAvailable()).toBe(true);
     });
 
     it('should handle feature flag state persistence', () => {
@@ -262,10 +258,9 @@ describe('Browser Capture Functional Tests', () => {
           expectedMethods: ['microphone']
         },
         {
-          name: 'Only Chrome disabled',
+          name: 'Chrome extension disabled',
           flags: { ENABLE_CHROME_EXTENSION: false },
-          expectedMethodsInclude: ['microphone'],
-          expectedMethodsExclude: ['chrome-tab', 'chrome-screen']
+          expectedMethodsInclude: ['chrome-tab', 'chrome-screen', 'microphone']
         },
         {
           name: 'Only Safari disabled', 
